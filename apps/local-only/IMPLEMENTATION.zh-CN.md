@@ -1,6 +1,6 @@
 # Cline Local 改造实施记录
 
-记录日期：2026-10-21。发行版版本：`0.1.0`。
+记录日期：2026-10-21。发行版版本：`0.1.1`。
 
 本记录描述此次实际写入仓库的改动，与最初的[需求方案](../../LOCAL_ONLY_FORK_PLAN.zh-CN.md)区分。安装和日常使用见[README](README.md)。
 
@@ -16,8 +16,8 @@
 
 | 文件 | 用途 |
 | --- | --- |
-| `cline-local-0.1.0.vsix` | VS Code 本地安装包，约 117 KiB |
-| `cline-local-clion-0.1.0-linux-x64.zip` | CLion Linux x86_64 本地安装包，约 36 MiB，含独立核心运行时 |
+| `cline-local-0.1.1.vsix` | VS Code 本地安装包 |
+| `cline-local-clion-0.1.1-linux-x64.zip` | CLion Linux x86_64 本地安装包，含独立核心运行时 |
 | `SHA256SUMS` | 两个安装包的实际 SHA-256；重新打包后以该文件为准 |
 | `core-inputs.json` | 核心构建输入模块清单 |
 | `vscode-inputs.json` | VS Code 构建输入模块清单 |
@@ -46,7 +46,7 @@
 | `apps/local-only/src/session.ts` | 连接真实 Cline Agent、受限模型、本地工具、审批、本地持久化、取消与撤销 |
 | `apps/local-only/src/server.ts` | 为 CLion 提供本机 stdio JSONL 协议；无监听端口或共享 daemon；处理任务、恢复、审批和退出 |
 | `apps/local-only/vscode/package.json` | 独立扩展 ID `local-cline.cline-local-only`，声明本地命令与可信工作区要求 |
-| `apps/local-only/vscode/extension.ts` | 新增中文 Webview、流式对话、模型配置入口、选择代码、本地历史、原生 diff 审阅与撤销 |
+| `apps/local-only/vscode/extension.ts` | 中文侧边栏 Webview、流式对话、模型设置表单、选择代码、本地历史、原生 diff 审阅与撤销 |
 | `apps/local-only/jetbrains/resources/META-INF/plugin.xml` | 独立插件 ID `local.cline.agent`，注册工具窗口，声明 243 平台起始版本 |
 | `apps/local-only/jetbrains/src/local/cline/LocalToolWindowFactory.java` | 新建 Swing 宿主；管理随包核心进程、JSONL、模型配置、前后内容审阅、历史与关闭清理 |
 | `apps/local-only/scripts/build.mjs` | 编译核心与 VS Code；对所有实际打包模块执行允许清单检查；可编译并运行测试 |
@@ -56,7 +56,7 @@
 | `apps/local-only/README.md` | 安装、配置、构建、功能、限制与部署边界说明 |
 | `apps/local-only/IMPLEMENTATION.zh-CN.md` | 本实施记录，包括完整文件清单和验证结果 |
 
-没有修改 SDK 原始实现、原版 VS Code 运行入口或 `.gitignore`，没有创建 changeset、发布 tag、PR 或 Git 提交。
+没有修改 SDK 原始实现、原版 VS Code 运行入口或 `.gitignore`，没有创建 changeset、发布 tag 或 PR。源码保存在 `dev` 分支。
 
 ## 3. 模型网络通道
 
@@ -137,12 +137,14 @@ CLion 包包含编译好的 Java 宿主、Gson、独立核心、核心 JavaScrip
 | 禁网与环境隔离测试 | 沙箱不能连接宿主回环服务，无法继承用户测试环境变量 |
 | 取消后的迟到批准 | 不写入文件，任务状态为已取消 |
 | stdio 生命周期 | 启动、任务、流式回复、完成与 EOF 退出通过 |
+| 模型设置表单持久化 | 私有文件权限、保留与清除 API Key、拒绝公网端点、Webview 不回读密钥通过 |
 | 独立核心 | 同一测试改用 CLion 包内的已编译可执行文件，再次通过 |
-| 测试总数 | 11 项通过，0 失败；Node 核心和独立核心验证均通过 |
-| VSIX 结构与安装 | XML／JSON 可解析；VS Code 1.142.0 CLI 在独立测试目录安装成功 |
+| 测试总数 | 0.1.1 的 Node 测试 12 项通过，0 失败；初版独立核心的 11 项验证通过 |
+| VSIX 结构与安装 | 活动栏图标、Webview 视图声明和资源都在 VSIX 中；VS Code CLI 在独立测试目录安装 0.1.1 成功 |
+| 侧边栏激活检查 | 使用 VS Code API mock 激活打包的扩展，确认视图提供者注册、Webview 解析和设置表单生成 |
 | CLion ZIP 结构 | 包含插件 JAR、插件描述文件、Gson、可执行核心、源码 bundle 和许可 |
 
-VS Code 安装测试使用 `/tmp/pline-local-vscode-user/` 与 `/tmp/pline-local-vscode-extensions/`，未替换用户常用 IDE 配置。测试目录中禁用了 IDE 遥测、更新和扩展自动更新。CLI 的成功安装不等于完整界面端到端验证。
+VS Code 安装测试使用 `/tmp/pline-local-vscode-user/` 与 `/tmp/pline-local-vscode-extensions/`，未替换用户常用 IDE 配置。CLI 安装和 mock 激活不等于完整界面端到端验证。
 
 尚未验证：用户 Fedora 笔记本的 namespace／企业策略、实际内网模型的协议与工具调用表现、CLion 窗口内的完整交互、全部声明版本的 IDE 兼容性、严格部署的全系统网络观测。未获得这些证据前，不能承诺绝对无外传或公司不可见。
 
@@ -151,8 +153,8 @@ VS Code 安装测试使用 `/tmp/pline-local-vscode-user/` 与 `/tmp/pline-local
 在保存此仓库的机器上，安装包绝对路径为：
 
 ```text
-/home/thomas/MyProjects/pline/apps/local-only/dist/release/cline-local-0.1.0.vsix
-/home/thomas/MyProjects/pline/apps/local-only/dist/release/cline-local-clion-0.1.0-linux-x64.zip
+/home/thomas/MyProjects/pline/apps/local-only/dist/release/cline-local-0.1.1.vsix
+/home/thomas/MyProjects/pline/apps/local-only/dist/release/cline-local-clion-0.1.1-linux-x64.zip
 ```
 
 把对应安装包复制到要安装的机器即可，无需复制整个源码仓库。
@@ -160,10 +162,10 @@ VS Code 安装测试使用 `/tmp/pline-local-vscode-user/` 与 `/tmp/pline-local
 VS Code 可使用命令：
 
 ```sh
-code --install-extension /实际存放路径/cline-local-0.1.0.vsix
+code --install-extension /实际存放路径/cline-local-0.1.1.vsix --force
 ```
 
-或扩展面板 `… → Install from VSIX…`。安装后打开本地项目，在命令面板执行 `Cline Local: 打开本地 Agent`，点击“模型设置”。
+或扩展面板 `… → Install from VSIX…`。安装后执行 `Developer: Reload Window`，打开本地项目，点击左侧活动栏的 `Cline Local` 图标，进入 `本地 Agent` 视图；也可在命令面板执行 `Cline Local: 打开本地 Agent`。点击“模型设置”即可在侧边栏填写并保存模型地址、模型 ID、输出 token 与可选 API Key。若活动栏图标被隐藏，可在活动栏右键菜单勾选 `Cline Local`。
 
 CLion 使用 `Settings → Plugins → 齿轮 → Install Plugin from Disk…`，选择 ZIP，不要预先解压；按 IDE 提示重启，打开 `Cline Local` 工具窗口和“模型设置”。本次 ZIP 仅支持 Linux x86_64。
 
@@ -171,21 +173,13 @@ CLion 使用 `Settings → Plugins → 齿轮 → Install Plugin from Disk…`�
 
 ## 9. Git 中查看与提交
 
-此次修改直接写在工作目录 `/home/thomas/MyProjects/pline` 的 `main` 分支，没有自动暂存、提交或推送。提交前可查看：
+源码位于工作目录 `/home/thomas/MyProjects/pline` 的 `dev` 分支。初版提交为 `33544fafb`；修复侧边栏和模型设置的 0.1.1 修改也在 `dev` 分支。查看：
 
 ```sh
 cd /home/thomas/MyProjects/pline
+git branch --show-current
+git log -2 --oneline
 git status --short
-git diff --stat
-git ls-files --others --exclude-standard apps/local-only
 ```
 
-`git diff` 只显示已跟踪文件的差异；新目录显示为 `?? apps/local-only/`，未暂存的新文件不会包含在普通 `git diff` 中。`git commit` 只提交暂存区，`git commit -a` 也不会包含新文件。需要提交时：
-
-```sh
-git add README.md package.json bun.lock LOCAL_ONLY_FORK_PLAN.zh-CN.md apps/local-only
-git diff --cached --stat
-git commit -m "feat: add local-only Cline distribution for VS Code and CLion"
-```
-
-上述命令会暂存源码和文档，现有忽略规则仍排除 `dist/` 安装包。不需要把大二进制强制加入 Git；安装包可单独本地复制或通过获准的制品渠道保存。本次没有执行这些 Git 写入命令。
+`dist/` 安装包仍按仓库忽略规则排除，不在 Git 提交中；可用本地包路径安装，或复制到目标机器。`main` 不包含这些修改。

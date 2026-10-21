@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>local.cline.agent</id>
   <name>Cline Local</name>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
   <vendor>Local Cline Fork</vendor>
   <description><![CDATA[Local coding agent with an explicitly configured private model endpoint. No cloud accounts, telemetry, marketplace, automatic updates or remote web resources. Linux x86_64 distribution.]]></description>
   <idea-version since-build="243"/>

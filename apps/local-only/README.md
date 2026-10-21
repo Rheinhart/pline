@@ -9,8 +9,8 @@
 ## 安装与配置
 
 1. 从 `dist/release/` 取出 `.vsix` 或 `cline-local-clion-…-linux-x64.zip`，用随包 `SHA256SUMS` 校验。
-2. VS Code 使用本地 VSIX 安装，执行 **Cline Local: 打开本地 Agent**。CLion 使用 **Settings → Plugins → Install Plugin from Disk** 安装 ZIP，打开 **Cline Local** 工具窗口。
-3. 点击“模型设置”。配置保存在 `~/.config/cline-local/config.json`，目录权限 `0700`，文件权限 `0600`。不读取项目配置、原版 Cline 凭证、系统代理或云模型环境变量。
+2. VS Code 使用本地 VSIX 安装，打开一个本地项目，点击活动栏的 **Cline Local** 图标；也可执行 **Cline Local: 打开本地 Agent**。如果从旧版升级后看不到图标，执行 **Developer: Reload Window**，并检查活动栏图标是否被隐藏。CLion 使用 **Settings → Plugins → Install Plugin from Disk** 安装 ZIP，打开 **Cline Local** 工具窗口。
+3. 在侧边栏点击“模型设置”，直接填写地址、模型 ID、输出 token 和可选 API Key；保存后新任务生效。配置保存在 `~/.config/cline-local/config.json`，目录权限 `0700`，文件权限 `0600`。Webview 不会读回已保存的 API Key 明文。不读取项目配置、原版 Cline 凭证、系统代理或云模型环境变量。
 4. 设置一个模型端点和模型 ID，开始新任务。没有在线模型发现、模型下载或公网回退；使用模型服务已提供的准确模型 ID。
 
 ```json

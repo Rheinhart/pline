@@ -13,7 +13,7 @@ import { createLocalModel } from "../src/model";
 import { Workspace } from "../src/workspace";
 import { LocalSession, type Event } from "../src/session";
 import { localTools } from "../src/tools";
-import { History } from "../src/storage";
+import { History, readSettings, readSettingsDraft, saveSettings } from "../src/storage";
 import { sandboxArguments, runIsolated } from "../src/sandbox";
 
 async function directory(t: any): Promise<string> {
@@ -35,6 +35,25 @@ function sse(response: http.ServerResponse, delta: unknown, finish = "stop", don
   response.end(done ? "data: [DONE]\n\n" : "");
 }
 const request = { messages: [], tools: [] };
+
+test("settings UI saves a private config and never returns the credential", async (t) => {
+  const dir = await directory(t);
+  const filename = path.join(dir, "config.json");
+  const blank = await readSettingsDraft(filename);
+  assert.equal(blank.baseUrl, "");
+  assert.equal(blank.hasApiKey, false);
+  const first = await saveSettings({ baseUrl: "http://192.168.1.50:8000/v1", model: "local", maxTokens: 4096, commands: false, apiKey: "secret" }, filename);
+  assert.equal(first.hasApiKey, true);
+  assert.equal(JSON.stringify(first).includes("secret"), false);
+  assert.equal((await fs.stat(filename)).mode & 0o077, 0);
+  const second = await saveSettings({ baseUrl: first.baseUrl, model: "local-2", maxTokens: 2048, commands: false, apiKey: "" }, filename);
+  assert.equal(second.model, "local-2");
+  assert.equal((await readSettings(filename)).apiKey, "secret");
+  await assert.rejects(saveSettings({ baseUrl: "https://api.openai.com/v1", model: "bad", maxTokens: 4096, commands: false }, filename));
+  assert.equal((await readSettings(filename)).model, "local-2");
+  await saveSettings({ baseUrl: first.baseUrl, model: "local", maxTokens: 4096, commands: false, clearApiKey: true }, filename);
+  assert.equal((await readSettings(filename)).apiKey, "");
+});
 
 test("endpoint validation rejects public, DNS, metadata, proxies and obfuscated destinations", () => {
   for (const value of ["https://api.openai.com/v1", "https://8.8.8.8/v1", "http://169.254.169.254/v1", "http://0.0.0.0/v1", "http://100.64.0.1/v1", "http://192.168.1.2.evil.test/v1", "http://user:secret@192.168.1.2/v1", "http://192.168.1.2/v1?target=x", "http://192.168.1.2/v1#x", "http://2130706433/v1", "http://0x7f000001/v1", "http://0177.0.0.1/v1", "http://[::ffff:192.168.1.1]/v1", "http://[fe80::1]/v1", "http://127.0.0.2/v1", "http://192.168.1.2/anything", "ftp://192.168.1.2/v1"]) {

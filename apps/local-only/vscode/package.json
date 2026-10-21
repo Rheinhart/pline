@@ -2,7 +2,7 @@
   "name": "cline-local-only",
   "displayName": "Cline Local",
   "description": "Local coding agent using only your explicitly configured private model endpoint.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "local-cline",
   "license": "Apache-2.0",
   "engines": { "vscode": "^1.101.0" },
@@ -11,6 +11,16 @@
   "extensionKind": ["workspace"],
   "capabilities": { "untrustedWorkspaces": { "supported": false }, "virtualWorkspaces": { "supported": false } },
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "clineLocal", "title": "Cline Local", "icon": "assets/icon.svg" }
+      ]
+    },
+    "views": {
+      "clineLocal": [
+        { "type": "webview", "id": "clineLocal.chatView", "name": "本地 Agent" }
+      ]
+    },
     "commands": [
       { "command": "clineLocal.open", "title": "Cline Local: 打开本地 Agent" },
       { "command": "clineLocal.configure", "title": "Cline Local: 配置内网模型" },

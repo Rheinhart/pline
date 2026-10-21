@@ -7,6 +7,8 @@ import type { Edit } from "./workspace";
 import { validateSettings, type ModelSettings } from "./policy";
 
 export interface Settings extends ModelSettings { commands?: boolean }
+export interface SettingsDraft { baseUrl: string; model: string; maxTokens: number; commands: boolean; hasApiKey: boolean }
+export interface SettingsUpdate { baseUrl: string; model: string; maxTokens: number; commands: boolean; apiKey?: string; clearApiKey?: boolean }
 export const configPath = () => path.join(homedir(), ".config", "cline-local", "config.json");
 
 export async function privateDirectory(directory: string): Promise<void> {
@@ -26,13 +28,43 @@ export async function ensureConfig(filename = configPath()): Promise<string> {
   return filename;
 }
 export async function readSettings(configFile = configPath()): Promise<Settings> {
+  const input = await readConfigObject(configFile);
+  return { ...validateSettings({ baseUrl: input.baseUrl as string, model: input.model as string, apiKey: input.apiKey as string | undefined, maxTokens: input.maxTokens as number | undefined }), commands: input.commands === true };
+}
+async function readConfigObject(configFile: string): Promise<Record<string, unknown>> {
   const filename = await ensureConfig(configFile);
   const stat = await fs.lstat(filename);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 16_384 || (process.platform !== "win32" && ((stat.mode & 0o077) !== 0 || stat.uid !== process.getuid?.()))) {
     throw new Error("Model config must be a regular, user-owned file with permissions 0600.");
   }
-  const input = JSON.parse(await fs.readFile(filename, "utf8"));
-  return { ...validateSettings(input), commands: input.commands === true };
+  const input: unknown = JSON.parse(await fs.readFile(filename, "utf8"));
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Invalid model config.");
+  return input as Record<string, unknown>;
+}
+export async function readSettingsDraft(configFile = configPath()): Promise<SettingsDraft> {
+  const input = await readConfigObject(configFile);
+  return {
+    baseUrl: typeof input.baseUrl === "string" ? input.baseUrl : "",
+    model: typeof input.model === "string" ? input.model : "",
+    maxTokens: Number.isInteger(input.maxTokens) ? input.maxTokens as number : 4096,
+    commands: input.commands === true,
+    hasApiKey: typeof input.apiKey === "string" && input.apiKey.length > 0,
+  };
+}
+export async function saveSettings(update: SettingsUpdate, configFile = configPath()): Promise<SettingsDraft> {
+  const current = await readConfigObject(configFile);
+  const candidate = validateSettings({
+    baseUrl: update.baseUrl, model: update.model, maxTokens: update.maxTokens,
+    apiKey: update.clearApiKey ? "" : update.apiKey || (typeof current.apiKey === "string" ? current.apiKey : ""),
+  });
+  if (typeof update.commands !== "boolean") throw new Error("Invalid command setting.");
+  const filename = await ensureConfig(configFile);
+  const temporary = `${filename}.${randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(temporary, JSON.stringify({ ...candidate, commands: update.commands }, null, 2) + "\n", { mode: 0o600, flag: "wx" });
+    await fs.rename(temporary, filename);
+  } finally { await fs.rm(temporary, { force: true }); }
+  return readSettingsDraft(configFile);
 }
 
 export class History {
