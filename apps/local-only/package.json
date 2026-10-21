@@ -1,0 +1,22 @@
+{
+  "name": "@cline/local-only",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local-only Cline distribution for VS Code and CLion",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "node scripts/check-types.mjs",
+    "test": "node scripts/build.mjs --test",
+    "package": "node scripts/package.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.1",
+    "@types/vscode": "1.101.0",
+    "esbuild": "0.25.0",
+    "jsonrepair": "3.13.1",
+    "nanoid": "5.1.7",
+    "typescript": "5.9.3",
+    "zod": "4.3.6"
+  }
+}

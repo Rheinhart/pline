@@ -1,0 +1,21 @@
+{
+  "name": "cline-local-only",
+  "displayName": "Cline Local",
+  "description": "Local coding agent using only your explicitly configured private model endpoint.",
+  "version": "0.1.0",
+  "publisher": "local-cline",
+  "license": "Apache-2.0",
+  "engines": { "vscode": "^1.101.0" },
+  "categories": ["Programming Languages"],
+  "main": "./dist/extension.cjs",
+  "extensionKind": ["workspace"],
+  "capabilities": { "untrustedWorkspaces": { "supported": false }, "virtualWorkspaces": { "supported": false } },
+  "contributes": {
+    "commands": [
+      { "command": "clineLocal.open", "title": "Cline Local: 打开本地 Agent" },
+      { "command": "clineLocal.configure", "title": "Cline Local: 配置内网模型" },
+      { "command": "clineLocal.selection", "title": "Cline Local: 将选中代码加入对话" }
+    ],
+    "menus": { "editor/context": [{ "command": "clineLocal.selection", "when": "editorHasSelection && isWorkspaceTrusted", "group": "navigation" }] }
+  }
+}

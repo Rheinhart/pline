@@ -1,3 +1,6 @@
+> 本 fork 的本机／内网专用发行版：**[Cline Local — VS Code 与 CLion 本地安装](apps/local-only/README.md)**。
+> 使用 `bun run package:local` 构建离线版；下方保留上游项目介绍，原版构建产物不具备本发行版的网络限制。
+
 <p align="center">
   <img src="assets/icons/icon.png" width="80" alt="Cline" />
 </p>

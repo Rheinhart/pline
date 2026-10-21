@@ -13,6 +13,10 @@
         "sdk/examples/plugins/*"
     ],
     "scripts": {
+        "build:local": "bun -F @cline/local-only build",
+        "test:local": "bun -F @cline/local-only test",
+        "typecheck:local": "bun -F @cline/local-only typecheck",
+        "package:local": "bun -F @cline/local-only package",
         "prepare": "husky",
         "build": "bun run clean && bun install && bun run build:sdk && bun -F @cline/cli build",
         "build:sdk": "bun --production -F './sdk/packages/*' build && bun sdk/packages/core/build-plugin-runtime.mts",
