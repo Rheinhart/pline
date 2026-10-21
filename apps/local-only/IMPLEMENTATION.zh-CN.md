@@ -1,6 +1,6 @@
 # Cline Local 改造实施记录
 
-记录日期：2026-10-21。发行版版本：`0.1.1`。
+记录日期：2026-10-21。发行版版本：`0.1.2`。
 
 本记录描述此次实际写入仓库的改动，与最初的[需求方案](../../LOCAL_ONLY_FORK_PLAN.zh-CN.md)区分。安装和日常使用见[README](README.md)。
 
@@ -16,8 +16,8 @@
 
 | 文件 | 用途 |
 | --- | --- |
-| `cline-local-0.1.1.vsix` | VS Code 本地安装包 |
-| `cline-local-clion-0.1.1-linux-x64.zip` | CLion Linux x86_64 本地安装包，含独立核心运行时 |
+| `cline-local-0.1.2.vsix` | VS Code 本地安装包 |
+| `cline-local-clion-0.1.2-linux-x64.zip` | CLion Linux x86_64 本地安装包，含独立核心运行时 |
 | `SHA256SUMS` | 两个安装包的实际 SHA-256；重新打包后以该文件为准 |
 | `core-inputs.json` | 核心构建输入模块清单 |
 | `vscode-inputs.json` | VS Code 构建输入模块清单 |
@@ -38,7 +38,7 @@
 | `apps/local-only/src/engine-shared.ts` | 只导出 Agent 所需的纯工具／解析函数；观测调用编译为无操作函数，不引入上传实现 |
 | `apps/local-only/src/engine-providers.ts` | 移除运行产物中的通用 provider 工厂；尝试使用该工厂直接失败；不进行后台 provider 重试 |
 | `apps/local-only/src/policy.ts` | 校验唯一模型地址、协议、私有字面 IP、固定路径、模型 ID、凭证格式和输出 token 上限 |
-| `apps/local-only/src/model.ts` | 实现受限 Chat Completions HTTP(S) 通道、消息转换、SSE 解析、工具调用完整性检查、大小与超时限制 |
+| `apps/local-only/src/model.ts` | 实现受限 Chat Completions HTTP(S) 通道、手动私有端点模型列表、模型参数、消息转换、SSE 解析、工具调用完整性检查、大小与超时限制 |
 | `apps/local-only/src/workspace.ts` | 实现项目路径检查、读取／列表、链接与敏感路径排除、修改提案和批准后的冲突检查写入 |
 | `apps/local-only/src/sandbox.ts` | 生成允许文件的临时只读快照，使用 bubblewrap 执行禁网命令，清理环境并处理超时／取消 |
 | `apps/local-only/src/tools.ts` | 注册 `list_files`、`read_file`、`search_files`、`write_file`，可选 `run_command`；返回结构化工具错误 |
@@ -66,7 +66,7 @@
 
 - 配置入口是独立用户配置文件，不读取仓库 provider 配置、原版凭证、组织配置、云模型环境变量。
 - 允许 HTTP(S) 和规范字面 IP：`127.0.0.1`、`::1`、RFC1918 IPv4 私有范围，以及 IPv6 ULA。拒绝域名、其他回环地址、链路本地、未指定、公网和 IPv4 映射 IPv6。
-- 基础路径限定为 `/v1`；实际请求固定为 `POST /v1/chat/completions`。没有通用代理、URL 抓取或文件上传接口。
+- 基础路径限定为 `/v1`；任务请求固定为 `POST /v1/chat/completions`，手动模型列表请求固定为 `GET /v1/models`。没有通用代理、URL 抓取或文件上传接口。
 - 使用独立的原生 HTTP(S) agent，不继承 HTTP(S)/ALL_PROXY 或全局 agent；字面 IP 不触发域名解析。
 - 不跟随重定向；HTTPS 明确开启证书校验；没有关闭证书验证选项。
 - 请求最多 2 MiB、响应最多 8 MiB；空闲超时 120 秒、单次请求总超时 5 分钟。
@@ -138,9 +138,10 @@ CLion 包包含编译好的 Java 宿主、Gson、独立核心、核心 JavaScrip
 | 取消后的迟到批准 | 不写入文件，任务状态为已取消 |
 | stdio 生命周期 | 启动、任务、流式回复、完成与 EOF 退出通过 |
 | 模型设置表单持久化 | 私有文件权限、保留与清除 API Key、拒绝公网端点、Webview 不回读密钥通过 |
+| 模型参数与发现 | Context Window、Temperature、Reasoning Effort 生效；仅向私有端点请求模型列表，均通过 |
 | 独立核心 | 同一测试改用 CLion 包内的已编译可执行文件，再次通过 |
-| 测试总数 | 0.1.1 的 Node 测试 12 项通过，0 失败；初版独立核心的 11 项验证通过 |
-| VSIX 结构与安装 | 活动栏图标、Webview 视图声明和资源都在 VSIX 中；VS Code CLI 在独立测试目录安装 0.1.1 成功 |
+| 测试总数 | 0.1.2 的 Node 测试 14 项通过，0 失败；初版独立核心的 11 项验证通过 |
+| VSIX 结构与安装 | 活动栏图标、Webview 视图声明和资源都在 VSIX 中；VS Code CLI 在独立测试目录安装 0.1.2 成功 |
 | 侧边栏激活检查 | 使用 VS Code API mock 激活打包的扩展，确认视图提供者注册、Webview 解析和设置表单生成 |
 | CLion ZIP 结构 | 包含插件 JAR、插件描述文件、Gson、可执行核心、源码 bundle 和许可 |
 
@@ -153,8 +154,8 @@ VS Code 安装测试使用 `/tmp/pline-local-vscode-user/` 与 `/tmp/pline-local
 在保存此仓库的机器上，安装包绝对路径为：
 
 ```text
-/home/thomas/MyProjects/pline/apps/local-only/dist/release/cline-local-0.1.1.vsix
-/home/thomas/MyProjects/pline/apps/local-only/dist/release/cline-local-clion-0.1.1-linux-x64.zip
+/home/thomas/MyProjects/pline/apps/local-only/dist/release/cline-local-0.1.2.vsix
+/home/thomas/MyProjects/pline/apps/local-only/dist/release/cline-local-clion-0.1.2-linux-x64.zip
 ```
 
 把对应安装包复制到要安装的机器即可，无需复制整个源码仓库。
@@ -162,10 +163,10 @@ VS Code 安装测试使用 `/tmp/pline-local-vscode-user/` 与 `/tmp/pline-local
 VS Code 可使用命令：
 
 ```sh
-code --install-extension /实际存放路径/cline-local-0.1.1.vsix --force
+code --install-extension /实际存放路径/cline-local-0.1.2.vsix --force
 ```
 
-或扩展面板 `… → Install from VSIX…`。安装后执行 `Developer: Reload Window`，打开本地项目，点击左侧活动栏的 `Cline Local` 图标，进入 `本地 Agent` 视图；也可在命令面板执行 `Cline Local: 打开本地 Agent`。点击“模型设置”即可在侧边栏填写并保存模型地址、模型 ID、输出 token 与可选 API Key。若活动栏图标被隐藏，可在活动栏右键菜单勾选 `Cline Local`。
+或扩展面板 `… → Install from VSIX…`。安装后执行 `Developer: Reload Window`，打开本地项目，点击左侧活动栏的 `Cline Local` 图标，进入 `本地 Agent` 视图；也可在命令面板执行 `Cline Local: 打开本地 Agent`。点击“模型设置”即可在侧边栏填写并保存模型地址、模型 ID、上下文窗口、输出 token、Temperature、Reasoning Effort 与可选 API Key。保存后可手动读取内网模型列表。若活动栏图标被隐藏，可在活动栏右键菜单勾选 `Cline Local`。
 
 CLion 使用 `Settings → Plugins → 齿轮 → Install Plugin from Disk…`，选择 ZIP，不要预先解压；按 IDE 提示重启，打开 `Cline Local` 工具窗口和“模型设置”。本次 ZIP 仅支持 Linux x86_64。
 
@@ -173,7 +174,7 @@ CLion 使用 `Settings → Plugins → 齿轮 → Install Plugin from Disk…`�
 
 ## 9. Git 中查看与提交
 
-源码位于工作目录 `/home/thomas/MyProjects/pline` 的 `dev` 分支。初版提交为 `33544fafb`；修复侧边栏和模型设置的 0.1.1 修改也在 `dev` 分支。查看：
+源码位于工作目录 `/home/thomas/MyProjects/pline` 的 `dev` 分支。初版提交为 `33544fafb`；侧边栏与模型设置修复提交为 `047b273cb`；0.1.2 扩展了本地模型参数。查看：
 
 ```sh
 cd /home/thomas/MyProjects/pline

@@ -5,6 +5,9 @@ export interface ModelSettings {
   model: string;
   apiKey?: string;
   maxTokens?: number;
+  contextWindow?: number;
+  temperature?: number;
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
 }
 
 export function modelEndpoint(value: string): URL {
@@ -40,5 +43,10 @@ export function validateSettings(input: ModelSettings): Readonly<ModelSettings> 
   }
   const maxTokens = input.maxTokens ?? 4096;
   if (!Number.isInteger(maxTokens) || maxTokens < 128 || maxTokens > 32768) throw new Error("maxTokens must be 128–32768.");
-  return Object.freeze({ baseUrl: input.baseUrl, model: input.model.trim(), apiKey: input.apiKey, maxTokens });
+  const contextWindow = input.contextWindow ?? 131072;
+  if (!Number.isInteger(contextWindow) || contextWindow < 4096 || contextWindow > 2_000_000 || contextWindow <= maxTokens) throw new Error("contextWindow must be 4096–2000000 and larger than maxTokens.");
+  if (input.temperature !== undefined && (typeof input.temperature !== "number" || !Number.isFinite(input.temperature) || input.temperature < 0 || input.temperature > 2)) throw new Error("temperature must be 0–2 or unset.");
+  const reasoningEffort = input.reasoningEffort ?? "none";
+  if (!["none", "low", "medium", "high", "xhigh"].includes(reasoningEffort)) throw new Error("Invalid reasoning effort.");
+  return Object.freeze({ baseUrl: input.baseUrl, model: input.model.trim(), apiKey: input.apiKey, maxTokens, contextWindow, temperature: input.temperature, reasoningEffort });
 }

@@ -8,8 +8,8 @@ import { once } from "node:events";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { modelEndpoint } from "../src/policy";
-import { createLocalModel } from "../src/model";
+import { modelEndpoint, validateSettings } from "../src/policy";
+import { createLocalModel, listLocalModels } from "../src/model";
 import { Workspace } from "../src/workspace";
 import { LocalSession, type Event } from "../src/session";
 import { localTools } from "../src/tools";
@@ -42,13 +42,17 @@ test("settings UI saves a private config and never returns the credential", asyn
   const blank = await readSettingsDraft(filename);
   assert.equal(blank.baseUrl, "");
   assert.equal(blank.hasApiKey, false);
-  const first = await saveSettings({ baseUrl: "http://192.168.1.50:8000/v1", model: "local", maxTokens: 4096, commands: false, apiKey: "secret" }, filename);
+  const first = await saveSettings({ baseUrl: "http://192.168.1.50:8000/v1", model: "local", maxTokens: 4096, contextWindow: 65536, temperature: 0, reasoningEffort: "medium", commands: false, apiKey: "secret" }, filename);
   assert.equal(first.hasApiKey, true);
   assert.equal(JSON.stringify(first).includes("secret"), false);
+  assert.equal(first.contextWindow, 65536);
+  assert.equal(first.temperature, 0);
+  assert.equal(first.reasoningEffort, "medium");
   assert.equal((await fs.stat(filename)).mode & 0o077, 0);
   const second = await saveSettings({ baseUrl: first.baseUrl, model: "local-2", maxTokens: 2048, commands: false, apiKey: "" }, filename);
   assert.equal(second.model, "local-2");
   assert.equal((await readSettings(filename)).apiKey, "secret");
+  assert.equal((await readSettings(filename)).contextWindow, 65536);
   await assert.rejects(saveSettings({ baseUrl: "https://api.openai.com/v1", model: "bad", maxTokens: 4096, commands: false }, filename));
   assert.equal((await readSettings(filename)).model, "local-2");
   await saveSettings({ baseUrl: first.baseUrl, model: "local", maxTokens: 4096, commands: false, clearApiKey: true }, filename);
@@ -62,6 +66,37 @@ test("endpoint validation rejects public, DNS, metadata, proxies and obfuscated 
   for (const value of ["http://127.0.0.1:8000/v1", "https://192.168.1.2/v1/", "http://10.0.0.2/v1", "http://172.31.0.1:8080", "http://[::1]:8000/v1", "https://[fd00::1]/v1"]) {
     assert.equal(modelEndpoint(value).pathname, "/v1/chat/completions");
   }
+});
+
+test("model options validate and affect the local Chat Completions request", async (t) => {
+  let received: any;
+  const local = await server(t, (req, res) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => { received = JSON.parse(body); sse(res, { content: "ok" }); });
+  });
+  const settings = { baseUrl: local, model: "test", maxTokens: 1024, contextWindow: 8192, temperature: 0.25, reasoningEffort: "high" as const };
+  for await (const _ of await createLocalModel(settings).stream(request)) {}
+  assert.equal(received.max_tokens, 1024);
+  assert.equal(received.temperature, 0.25);
+  assert.equal(received.reasoning_effort, "high");
+  await assert.rejects(async () => { for await (const _ of await createLocalModel(settings).stream({ ...request, messages: [{ role: "user", content: [{ type: "text", text: "x".repeat(8192) }] }] } as any)) {} }, /configured window/u);
+  assert.throws(() => validateSettings({ ...settings, contextWindow: 512 }));
+  assert.throws(() => validateSettings({ ...settings, temperature: 3 }));
+  assert.throws(() => validateSettings({ ...settings, reasoningEffort: "invalid" as any }));
+});
+
+test("model discovery stays on the private endpoint and has a bounded response", async (t) => {
+  let requestedPath = "";
+  const local = await server(t, (req, res) => {
+    requestedPath = req.url ?? "";
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ data: [{ id: "qwen-local" }, { id: "other-local" }] }));
+  });
+  const models = await listLocalModels({ baseUrl: local, model: "qwen-local" });
+  assert.equal(requestedPath, "/v1/models");
+  assert.deepEqual(models, ["qwen-local", "other-local"]);
+  await assert.rejects(listLocalModels({ baseUrl: "https://api.openai.com/v1", model: "test" }));
 });
 
 test("workspace blocks traversal, symlinks, hard links, secrets, special and oversized files", async (t) => {

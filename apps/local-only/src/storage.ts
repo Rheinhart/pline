@@ -7,8 +7,8 @@ import type { Edit } from "./workspace";
 import { validateSettings, type ModelSettings } from "./policy";
 
 export interface Settings extends ModelSettings { commands?: boolean }
-export interface SettingsDraft { baseUrl: string; model: string; maxTokens: number; commands: boolean; hasApiKey: boolean }
-export interface SettingsUpdate { baseUrl: string; model: string; maxTokens: number; commands: boolean; apiKey?: string; clearApiKey?: boolean }
+export interface SettingsDraft { baseUrl: string; model: string; maxTokens: number; contextWindow: number; temperature: number | null; reasoningEffort: string; commands: boolean; hasApiKey: boolean }
+export interface SettingsUpdate { baseUrl: string; model: string; maxTokens: number; contextWindow?: number; temperature?: number | null; reasoningEffort?: ModelSettings["reasoningEffort"]; commands: boolean; apiKey?: string; clearApiKey?: boolean }
 export const configPath = () => path.join(homedir(), ".config", "cline-local", "config.json");
 
 export async function privateDirectory(directory: string): Promise<void> {
@@ -29,7 +29,7 @@ export async function ensureConfig(filename = configPath()): Promise<string> {
 }
 export async function readSettings(configFile = configPath()): Promise<Settings> {
   const input = await readConfigObject(configFile);
-  return { ...validateSettings({ baseUrl: input.baseUrl as string, model: input.model as string, apiKey: input.apiKey as string | undefined, maxTokens: input.maxTokens as number | undefined }), commands: input.commands === true };
+  return { ...validateSettings({ baseUrl: input.baseUrl as string, model: input.model as string, apiKey: input.apiKey as string | undefined, maxTokens: input.maxTokens as number | undefined, contextWindow: input.contextWindow as number | undefined, temperature: input.temperature as number | undefined, reasoningEffort: input.reasoningEffort as ModelSettings["reasoningEffort"] }), commands: input.commands === true };
 }
 async function readConfigObject(configFile: string): Promise<Record<string, unknown>> {
   const filename = await ensureConfig(configFile);
@@ -47,6 +47,9 @@ export async function readSettingsDraft(configFile = configPath()): Promise<Sett
     baseUrl: typeof input.baseUrl === "string" ? input.baseUrl : "",
     model: typeof input.model === "string" ? input.model : "",
     maxTokens: Number.isInteger(input.maxTokens) ? input.maxTokens as number : 4096,
+    contextWindow: Number.isInteger(input.contextWindow) ? input.contextWindow as number : 131072,
+    temperature: typeof input.temperature === "number" ? input.temperature : null,
+    reasoningEffort: typeof input.reasoningEffort === "string" ? input.reasoningEffort : "none",
     commands: input.commands === true,
     hasApiKey: typeof input.apiKey === "string" && input.apiKey.length > 0,
   };
@@ -55,6 +58,9 @@ export async function saveSettings(update: SettingsUpdate, configFile = configPa
   const current = await readConfigObject(configFile);
   const candidate = validateSettings({
     baseUrl: update.baseUrl, model: update.model, maxTokens: update.maxTokens,
+    contextWindow: update.contextWindow ?? (current.contextWindow as number | undefined),
+    temperature: update.temperature === null ? undefined : (update.temperature ?? (current.temperature as number | undefined)),
+    reasoningEffort: update.reasoningEffort ?? (current.reasoningEffort as ModelSettings["reasoningEffort"]),
     apiKey: update.clearApiKey ? "" : update.apiKey || (typeof current.apiKey === "string" ? current.apiKey : ""),
   });
   if (typeof update.commands !== "boolean") throw new Error("Invalid command setting.");

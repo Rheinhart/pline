@@ -69,9 +69,13 @@ export function createLocalModel(settings: ModelSettings): AgentModel {
     async *stream(request: AgentModelRequest): AsyncGenerator<AgentModelEvent> {
       const body = JSON.stringify({
         model: config.model, stream: true, max_tokens: config.maxTokens,
+        ...(config.temperature !== undefined ? { temperature: config.temperature } : {}),
+        ...(config.reasoningEffort !== "none" ? { reasoning_effort: config.reasoningEffort } : {}),
         messages: [...(request.systemPrompt ? [{ role: "system", content: request.systemPrompt }] : []), ...wireMessages(request.messages)],
         ...(request.tools.length ? { tools: request.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } })) } : {}),
       });
+      // UTF-8 byte length is a conservative estimate without a model-specific tokenizer.
+      if (Buffer.byteLength(body) > config.contextWindow! - config.maxTokens!) throw new Error("Context exceeds the configured window. Start a new task or increase the window to match the model.");
       const calls = new Map<number, { id: string; name: string; args: string }>();
       let buffer = "";
       let data: string[] = [];
@@ -123,4 +127,35 @@ export function createLocalModel(settings: ModelSettings): AgentModel {
       yield { type: "finish", reason: finished === "length" ? "max-tokens" : calls.size ? "tool-calls" : "stop" };
     },
   };
+}
+
+export async function listLocalModels(settings: ModelSettings): Promise<string[]> {
+  const config = validateSettings(settings);
+  const endpoint = modelEndpoint(config.baseUrl);
+  endpoint.pathname = "/v1/models";
+  const secure = endpoint.protocol === "https:";
+  const agent = secure ? new https.Agent({ rejectUnauthorized: true }) : new http.Agent();
+  try {
+    const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const request = (secure ? https.request : http.request)(endpoint, {
+        method: "GET", agent, rejectUnauthorized: true,
+        headers: { Accept: "application/json", ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}) },
+      }, resolve);
+      request.once("error", reject);
+      request.setTimeout(10_000, () => request.destroy(new Error("Local model list timed out.")));
+      request.end();
+    });
+    if (response.statusCode !== 200) { response.destroy(); throw new Error(`Local model list returned HTTP ${response.statusCode}.`); }
+    let body = "";
+    for await (const chunk of response) {
+      body += chunk;
+      if (Buffer.byteLength(body) > 1024 * 1024) throw new Error("Local model list exceeded 1 MiB.");
+    }
+    const parsed: unknown = JSON.parse(body);
+    if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as { data?: unknown }).data)) throw new Error("Invalid local model list.");
+    return (parsed as { data: unknown[] }).data.flatMap((item) => {
+      const id = item && typeof item === "object" ? (item as { id?: unknown }).id : undefined;
+      return typeof id === "string" && id.length > 0 && id.length <= 200 && !/[\r\n\0]/u.test(id) ? [id] : [];
+    }).slice(0, 500);
+  } finally { agent.destroy(); }
 }
