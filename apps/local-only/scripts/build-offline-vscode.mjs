@@ -60,6 +60,57 @@ const REDIRECTS = new Map([
   [path.join(app, "src/services/feature-flags/FeatureFlagsProviderFactory.ts"), path.join(offline, "stubs/feature-flags-provider-factory.ts")],
 ]);
 
+function redirectPackage(upstream, replacement) {
+  // `@cline/*` resolves to the compiled barrel, but a source build resolves the
+  // same modules under `src`; register both so the table works either way.
+  const [pkg, ...rest] = upstream.split("/");
+  const tail = rest.join("/");
+  REDIRECTS.set(path.join(repo, `sdk/packages/${pkg}/dist/${tail}.js`), path.join(offline, replacement));
+  REDIRECTS.set(path.join(repo, `sdk/packages/${pkg}/src/${tail}.ts`), path.join(offline, replacement));
+}
+
+// Cloud model gateways and hosted tracing. The Settings UI keeps listing the
+// providers; selecting one reports a local error instead of connecting, and the
+// vendor SDK trees stay out of the bundle.
+for (const vendor of ["anthropic", "bedrock", "google", "vertex", "cline", "community"]) {
+  redirectPackage(`llms/providers/vendors/${vendor}`, "stubs/cloud-provider.ts");
+}
+for (const service of ["langfuse-telemetry", "langfuse-stream-telemetry", "LangfuseAttributesSpanProcessor"]) {
+  redirectPackage(`llms/services/${service}`, "stubs/langfuse-telemetry.ts");
+}
+
+// Cloud SDKs that `@cline/llms` and `@cline/core` import by package name. They
+// ship inside those bundles, so their vendor modules cannot be redirected
+// individually; the npm specifier can. Model SDKs report a local error when
+// used, telemetry SDKs stay silent because they can be touched at import time.
+const PACKAGE_STUBS = [
+  { prefix: "@ai-sdk/anthropic", stub: "stubs/cloud-sdk-throw.cjs" },
+  { prefix: "@ai-sdk/google", stub: "stubs/cloud-sdk-throw.cjs" },
+  { prefix: "@ai-sdk/amazon-bedrock", stub: "stubs/cloud-sdk-throw.cjs" },
+  { prefix: "@ai-sdk/otel", stub: "stubs/cloud-sdk-noop.cjs" },
+  { prefix: "@aws-sdk/", stub: "stubs/cloud-sdk-throw.cjs" },
+  { prefix: "@aws/", stub: "stubs/cloud-sdk-throw.cjs" },
+  { prefix: "@smithy/", stub: "stubs/cloud-sdk-throw.cjs" },
+  { prefix: "@sap/", stub: "stubs/cloud-sdk-throw.cjs" },
+  { prefix: "@sap-ai-sdk/", stub: "stubs/cloud-sdk-throw.cjs" },
+  { prefix: "@sap-cloud-sdk/", stub: "stubs/cloud-sdk-throw.cjs" },
+  { prefix: "google-auth-library", stub: "stubs/cloud-sdk-throw.cjs" },
+  { prefix: "@openrouter/", stub: "stubs/cloud-sdk-throw.cjs" },
+  { prefix: "@langfuse/", stub: "stubs/cloud-sdk-noop.cjs" },
+  { prefix: "@opentelemetry/exporter", stub: "stubs/cloud-sdk-noop.cjs" },
+  { prefix: "@opentelemetry/sdk-", stub: "stubs/cloud-sdk-noop.cjs" },
+  { prefix: "@opentelemetry/otlp", stub: "stubs/cloud-sdk-noop.cjs" },
+  { prefix: "@opentelemetry/resources", stub: "stubs/cloud-sdk-noop.cjs" },
+];
+
+function packageStub(specifier) {
+  for (const entry of PACKAGE_STUBS) {
+    const prefix = entry.prefix.replace(/\/$/, "");
+    if (specifier === prefix || specifier.startsWith(entry.prefix)) return path.join(offline, entry.stub);
+  }
+  return undefined;
+}
+
 const GUARDED = new Set(["net", "tls", "dns", "dgram", "http", "https"]);
 const WRAPPERS = Object.fromEntries([...GUARDED].map((name) => [name, path.join(offline, "node", `${name}.ts`)]));
 
@@ -100,12 +151,13 @@ const offlineGuards = {
     build.onResolve({ filter: /^(node:)?(net|tls|dns|dgram|http|https)$/, namespace: "file" }, (args) => {
       const bare = args.path.replace(/^node:/u, "");
       if (!GUARDED.has(bare)) return undefined;
-      // The wrappers themselves must reach the real builtins, otherwise they
-      // would resolve to each other.
-      if (path.dirname(args.importer) === path.join(offline, "node")) return undefined;
+      // Our own modules always use the real builtins; the guarded wrappers exist
+      // for the upstream code in the bundle. Without this the wrappers would
+      // resolve to each other and create an initialisation cycle.
+      if (args.importer.startsWith(offline)) return undefined;
       return { path: WRAPPERS[bare] };
     });
-    build.onResolve({ filter: /^[.@]/, namespace: "file" }, async (args) => {
+    build.onResolve({ filter: /.*/, namespace: "file" }, async (args) => {
       // esbuild reports importers relative to absWorkingDir; make it absolute
       // so relative specifiers resolve against the right directory.
       const importer = path.isAbsolute(args.importer) ? args.importer : path.resolve(app, args.importer);
@@ -115,6 +167,8 @@ const offlineGuards = {
         const redirect = REDIRECTS.get(resolved);
         return redirect ? { path: redirect } : undefined;
       }
+      const stub = packageStub(args.path);
+      if (stub) return { path: stub };
       // Package subpaths (for example the lazily imported
       // `@cline/core/services/feature-flags/posthog`) need the real resolver to
       // follow the package's exports map before the table can be consulted.
@@ -139,49 +193,43 @@ const offlineGuards = {
   },
 };
 
-// Anything that can open a socket to a third party on its own must be gone:
-// analytics, tracing, error reporting, browser automation and cloud SDKs whose
-// endpoints are always public.
+// Modules that must never reach the bundle: analytics, tracing exporters, error
+// reporting, browser automation and cloud model SDKs whose endpoints are always
+// public.
 const FORBIDDEN = [
   "posthog-node",
   "@posthog/",
-];
-
-// Remote model gateways that are still reachable through the upstream provider
-// registry. They cannot connect (the policy denies their public hosts), but the
-// provider allowlist step will drop the code itself; the count is reported so
-// this does not get forgotten.
-const PENDING = [
+  "puppeteer-core",
+  "chromium-bidi",
+  "@puppeteer/",
+  "@ai-sdk/anthropic",
+  "@ai-sdk/google",
+  "@ai-sdk/amazon-bedrock",
+  "@ai-sdk/otel",
   "@aws-sdk/",
   "@aws/",
   "@smithy/",
-  "@ai-sdk/anthropic",
-  "@ai-sdk/google",
-  "@ai-sdk/google-vertex",
-  "@ai-sdk/amazon-bedrock",
+  "@sap/",
+  "@sap-ai-sdk/",
+  "@sap-cloud-sdk/",
+  "google-auth-library",
   "@openrouter/",
+  "@langfuse/",
+  "@opentelemetry/sdk-",
+  "@opentelemetry/otlp",
+  "@opentelemetry/exporter",
+  "@opentelemetry/resources",
+];
+
+// Third-party code that stays real but cannot connect anywhere: the OpenTelemetry
+// API surface carries no transport of its own, and the address policy denies
+// every public host.
+const PENDING = [
   "@opentelemetry/api",
   "@opentelemetry/core",
   "@opentelemetry/semantic-conventions",
   "@opentelemetry/context-async-hooks",
   "@opentelemetry/propagator-",
-  // Tracing exporters are still reachable code, but the build inlines
-  // OTEL_TELEMETRY_ENABLED=false (see `define`), so no provider or exporter is
-  // ever constructed and nothing is scheduled for delivery.
-  "@opentelemetry/sdk-",
-  "@opentelemetry/otlp",
-  "@opentelemetry/exporter",
-  "@opentelemetry/resources",
-  "@opentelemetry/instrumentation",
-  // Remote model gateways reached through the `@cline/llms` barrel. The
-  // provider allowlist step removes them; until then the address policy keeps
-  // them unreachable, and the audit prints how many modules are still present.
-  "@langfuse/",
-  "@ai-sdk/otel",
-  "google-auth-library",
-  "@sap/",
-  "@sap-ai-sdk/",
-  "@sap-cloud-sdk/",
 ];
 
 function matches(input, packages) {
@@ -270,7 +318,7 @@ async function main() {
   );
   if (pending.length > 0) {
     const roots = [...new Set(pending.map((input) => input.match(/node_modules\/(?:\.bun\/[^/]+\/node_modules\/)?((?:@[^/]+\/)?[^/]+)/)?.[1]))];
-    console.log(`Note: ${pending.length} modules of remote model gateway SDKs are still bundled (${roots.join(", ")}); they cannot connect under this policy and are scheduled for removal with the provider allowlist.`);
+    console.log(`Note: ${pending.length} transport-free modules remain (${roots.join(", ")}); they cannot open a connection.`);
   }
 }
 

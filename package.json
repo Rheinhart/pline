@@ -19,6 +19,7 @@
         "package:local": "bun -F @cline/local-only package",
         "build:local-offline": "node apps/local-only/scripts/build-offline-vscode.mjs",
         "test:local-offline": "node apps/local-only/scripts/test-offline.mjs",
+        "smoke:local-offline": "node apps/local-only/scripts/smoke-offline-vscode.mjs",
         "prepare": "husky",
         "build": "bun run clean && bun install && bun run build:sdk && bun -F @cline/cli build",
         "build:sdk": "bun --production -F './sdk/packages/*' build && bun sdk/packages/core/build-plugin-runtime.mts",

@@ -62,10 +62,23 @@ export class OfflineNetworkError extends Error {
 
 export function setNetworkOptions(next: Partial<NetworkOptions>): void {
   options = { ...options, ...next };
+  if (options.strictSockets) socketGuardEnabler?.();
+}
+
+let socketGuardEnabler: (() => void) | undefined;
+
+/**
+ * `node/net` registers its prototype patch here. The callback is wired instead
+ * of imported so the policy module stays free of module cycles, and
+ * `getNetworkOptions` below stays safe while modules are still initialising.
+ */
+export function registerSocketGuardEnabler(enable: () => void): void {
+  socketGuardEnabler = enable;
+  if (options?.strictSockets) enable();
 }
 
 export function getNetworkOptions(): Readonly<NetworkOptions> {
-  return options;
+  return options ?? DEFAULTS;
 }
 
 const denials: string[] = [];

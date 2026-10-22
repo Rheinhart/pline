@@ -12,11 +12,13 @@
   - `net-guard.ts` 顶替 `@shared/net`：无代理、不跟随重定向、请求体产生之前就拒绝。
   - `node/{net,tls,dns,dgram,http,https}.ts` 只在离线包内替换这些模块，策略在 connect 层再次生效（不影响扩展宿主里的其他插件）。
   - `stubs/` 替换 PostHog 客户端、遥测/错误/功能开关工厂、SDK 核心的账号功能开关与 PostHog provider、浏览器工具（puppeteer/下载 Chrome 全部出局）。
-- `scripts/build-offline-vscode.mjs`：编译 `offline/entry.ts` → `dist/offline-vscode/extension.js`，并对模块清单做审计（分析/遥测/浏览器自动化/云端厂商 SDK 不许进入包）。当前：4963 个模块、44.6 MiB（未压缩），审计通过；仍会打印云端网关 SDK 的剩余数量（经 `@cline/llms` 入口带入，等 provider 白名单一步删除）。
+- `stubs/` 替换 PostHog 客户端、遥测/错误/功能开关工厂、SDK 核心的账号功能开关与 PostHog provider、浏览器工具（puppeteer/下载 Chrome 全部出局）、以及**云端模型 provider**：`@cline/llms` 是一个打包好的 dist，无法逐个换掉 vendor 模块，因此改为在 **npm 包名**层面拦截：Anthropic / Google / Vertex / Bedrock（`@aws-sdk`、`@smithy`）/ SAP / Google Auth / OpenRouter 换成会报本地错误的桩，Langfuse 与 OTEL 导出器换成静默桩。设置界面仍然列出这些 provider，选中并开始时得到中文错误，不会联网。本机可用的入口（OpenAI 兼容、Ollama、LM Studio、LiteLLM）保持原样。另外 `stubs/cloud-provider.ts` 顶替 src 构建下的 vendor 模块。
+- `scripts/build-offline-vscode.mjs`：编译 `offline/entry.ts` → `dist/offline-vscode/extension.js`，并对模块清单做审计（禁止清单 22 项：分析、追踪导出器、错误上报、浏览器自动化、云端模型 SDK）。当前：**2765 个模块、34.8 MiB**（未压缩；原版为 5819 / 54 MiB），审计通过；剩下的 108 个 `@opentelemetry/api|core` 一类模块本身不含传输层，审计会单独列出说明。
+- `scripts/smoke-offline-vscode.mjs`：注入最小 `vscode` 模块后**实际 require 打包产物**，验证整个模块图能求值、`activate`/`deactivate` 存在。它已经抓到一个真实的循环依赖初始化 bug（`node/net` 在策略模块就绪前读取选项）。
 - `scripts/test-offline.mjs` + `tests/offline-net.test.ts`：7 项网络边界测试全部通过（含回环服务实际收发、重定向不跟随、代理环境变量无效、公网地址在发出前被拒、裸 socket/DNS 同策略）。
-- 根 `package.json` 新增 `build:local-offline`、`test:local-offline`。
+- 根 `package.json` 新增 `build:local-offline`、`test:local-offline`、`smoke:local-offline`。
 
-尚未做：provider 白名单（删除 bedrock/anthropic/google/sap 等云端网关代码）、把账户/市场/云会话/远程配置/历史上传等 UI 入口摘掉、`endpoints.json`（self-hosted 模式，端点指向回环）、CSP 收紧、VSIX 打包与真实安装验证、命令沙箱接入、CLion 宿主对接、以及本文件其余部分的文档改写。因此**第二条路线目前还不能安装使用**，`0.1.2` 的两个安装包仍是当前可用产物。
+尚未做：把账户/市场/云会话/远程配置/历史上传等 UI 入口摸干净（现在只是“连不上”，不是“看不到”）、`endpoints.json`（self-hosted 模式，端点指向回环）、CSP 收紧、VSIX 打包与**在 VS Code 里真实安装跑一轮任务**、命令沙箱接入、CLion 宿主对接、以及本文件其余部分的文档改写。因此**第二条路线目前还不能安装使用**，`0.1.2` 的两个安装包仍是当前可用产物。
 
 ---
 

@@ -7,7 +7,7 @@
  */
 
 import * as realNet from "node:net";
-import { assertAddressAllowed, getNetworkOptions } from "../net-policy";
+import { assertAddressAllowed, getNetworkOptions, registerSocketGuardEnabler } from "../net-policy";
 import { targetFromConnectArgs, withLookup } from "./args";
 import { privateLookup } from "./dns-lookup";
 
@@ -32,17 +32,25 @@ export const connect = wrap(realNet.connect) as unknown as typeof realNet.connec
 export const createConnection = wrap(realNet.createConnection) as unknown as typeof realNet.createConnection;
 
 if (getNetworkOptions().strictSockets) {
-  // Opt-in, process wide: meant for the standalone core process where no other
-  // extension shares the module cache. Off by default inside the extension host.
-  const original = realNet.Socket.prototype.connect;
-  if (!(original as unknown as { clineLocalGuarded?: boolean }).clineLocalGuarded) {
-    const guarded = function (this: realNet.Socket, ...args: unknown[]) {
-      guard(args);
-      return original.apply(this, args as never);
-    } as unknown as typeof original & { clineLocalGuarded: boolean };
-    guarded.clineLocalGuarded = true;
-    realNet.Socket.prototype.connect = guarded;
-  }
+  applyStrictSocketGuard();
 }
+
+/**
+ * Opt-in and process wide: meant for the standalone core process, where no
+ * other extension shares the module cache. Off by default inside the extension
+ * host, where patching `Socket.prototype` would also affect other extensions.
+ */
+export function applyStrictSocketGuard(): void {
+  const original = realNet.Socket.prototype.connect;
+  if ((original as unknown as { clineLocalGuarded?: boolean }).clineLocalGuarded) return;
+  const guarded = function (this: realNet.Socket, ...args: unknown[]) {
+    guard(args);
+    return original.apply(this, args as never);
+  } as unknown as typeof original & { clineLocalGuarded: boolean };
+  guarded.clineLocalGuarded = true;
+  realNet.Socket.prototype.connect = guarded;
+}
+
+registerSocketGuardEnabler(applyStrictSocketGuard);
 
 export default { ...realNet, connect, createConnection };
