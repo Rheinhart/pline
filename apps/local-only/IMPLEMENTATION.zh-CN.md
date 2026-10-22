@@ -22,7 +22,14 @@
 - `scripts/test-offline.mjs` + `tests/offline-net.test.ts`：7 项网络边界测试全部通过（含回环服务实际收发、重定向不跟随、代理环境变量无效、公网地址在发出前被拒、裸 socket/DNS 同策略）。
 - 根 `package.json` 新增 `build:local-offline`、`test:local-offline`、`smoke:local-offline`、`package:local-offline`。
 
-尚未做：**在真实 VS Code 窗口里跑一轮任务**（本环境 `DISPLAY=:1` 对 agent shell 不可用，VS Code 开不了窗口；VSIX 安装与加载已验证）；把账户/市场/云会话等入口改为“离线不可用”提示（现在只是连不上，不是看不到）；命令沙箱接入；CLion 宿主对接；本文件其余部分的文档改写。`0.1.2` 的两个旧安装包仍是之前已验证的产物。
+**真机已跑通**（用户机器，VS Code 扩展侧栏 + 局域网 OpenAI 兼容服务 `http://192.168.0.33:8080/v1`）：模型正常回复，说明回环/私有地址策略、明文局域网的 `lanPlainHttp` 开关、self-hosted 端点与 CSP 在一起是能共存的。
+
+真机上碰到的两个坑（都不是网络层问题）：
+
+1. 非回环的明文 http 默认被拒，报 `Plaintext http to 192.168.0.33 would expose your code on the LAN`。这是设计如斯：目标地址是 RFC1918（允许），但明文出本机就可能被同网段设备抓包。解法：`~/.config/cline-local/network.json` 写 `{ "lanPlainHttp": true }` 并重载窗口；想保留加密则用 SSH 隧道（`ssh -N -L 8080:127.0.0.1:8080 主机`，然后填 `http://127.0.0.1:8080/v1`）或给服务端配证书（`caCertPath` / `pinSha256`）。
+2. 首次打开侧栏报 `Could not register service worker: InvalidStateError: … The document is in an invalid state`。这是 VS Code 本身的 Webview 注册问题（完全退出后清理配置目录下的 `Service Worker` 缓存可解），与离线层无关；能报出 `local-cline.claude-dev` 就说明扩展已激活、视图已注册。官方 `saoudrizwan.claude-dev` 未安装时不存在视图 ID 冲突。
+
+尚未做：把账户/市场/云会话等入口改为“离线不可用”提示（现在只是连不上，不是看不到）；命令沙箱接入；CLion 宿主对接；本文件其余部分的文档改写。`0.1.2` 的两个旧安装包仍是之前已验证的产物。
 
 ---
 
