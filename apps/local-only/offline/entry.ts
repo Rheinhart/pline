@@ -9,7 +9,7 @@
 import { Logger } from "@/shared/services/Logger";
 import * as upstream from "@/extension";
 import { applyNetworkConfig } from "./network-settings";
-import { onNetworkDenial } from "./net-policy";
+import { getNetworkOptions, onNetworkDenial, onNetworkNotice } from "./net-policy";
 
 let installed = false;
 
@@ -60,7 +60,11 @@ function install(): void {
     Logger.error("[cline-local] Could not read the local network config; using the strict default policy.", error);
   }
   onNetworkDenial((message) => Logger.warn(`[cline-local] blocked connection: ${message}`));
-  Logger.info("[cline-local] Internet access is disabled. Only loopback and private LAN addresses are reachable, and https is required off-loopback.");
+  onNetworkNotice((message) => Logger.warn(`[cline-local] ${message}`));
+  const active = getNetworkOptions();
+  Logger.info(
+    `[cline-local] Internet access is disabled. Only loopback and private LAN addresses are reachable, and https is required off-loopback (lanPlainHttp=${String(active.lanPlainHttp)}, allowLanDns=${String(active.allowLanDns)}, allowCgnat=${String(active.allowCgnat)}, strictSockets=${String(active.strictSockets)}).`,
+  );
 }
 
 export async function activate(context: unknown): Promise<void> {

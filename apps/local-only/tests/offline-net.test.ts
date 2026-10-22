@@ -10,7 +10,7 @@ import * as http from "node:http";
 import * as net from "node:net";
 import { after, before, test } from "node:test";
 import { fetch, getAxiosSettings } from "../offline/net-guard";
-import { OfflineNetworkError, assertUrlAllowed, getNetworkOptions, isPrivateHost, setNetworkOptions } from "../offline/net-policy";
+import { OfflineNetworkError, assertUrlAllowed, getNetworkOptions, isPrivateHost, onNetworkNotice, setNetworkOptions } from "../offline/net-policy";
 import { applyNetworkConfig } from "../offline/network-settings";
 import { connect as guardedConnect } from "../offline/node/net";
 import { lookup as guardedLookup } from "../offline/node/dns";
@@ -67,7 +67,19 @@ test("plaintext http off-loopback needs an explicit opt-in", () => {
   assert.match(message, /network\.json/, "denial names a config file path");
   setNetworkOptions({ lanPlainHttp: true });
   try {
-    assert.equal(assertUrlAllowed(lan).protocol, "http:");
+    // Allowing plaintext must be visible: a permitted request is otherwise
+    // indistinguishable from an encrypted one.
+    const seen: string[] = [];
+    const off = onNetworkNotice((message) => seen.push(message));
+    try {
+      assert.equal(assertUrlAllowed(lan).protocol, "http:");
+      assert.equal(assertUrlAllowed(lan).protocol, "http:");
+    } finally {
+      off();
+    }
+    assert.equal(seen.length, 1, "the plaintext allowance is reported once per destination");
+    assert.match(seen[0] ?? "", /unencrypted/, "the notice says the data is not encrypted");
+    assert.match(seen[0] ?? "", /127\.0\.0\.1:8080/, "the notice suggests the loopback alternative");
   } finally {
     setNetworkOptions({ lanPlainHttp: false });
   }

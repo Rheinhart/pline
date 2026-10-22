@@ -26,7 +26,7 @@
 
 真机上碰到的两个坑（都不是网络层问题）：
 
-1. 非回环的明文 http 默认被拒，报 `Plaintext http to 192.168.0.33 would expose your code on the LAN`。这是设计如斯：目标地址是 RFC1918（允许），但明文出本机就可能被同网段设备抓包。解法：`~/.config/cline-local/network.json` 写 `{ "lanPlainHttp": true }` 并重载窗口；想保留加密则用 SSH 隧道（`ssh -N -L 8080:127.0.0.1:8080 主机`，然后填 `http://127.0.0.1:8080/v1`）或给服务端配证书（`caCertPath` / `pinSha256`）。
+1. 非回环的明文 http 默认被拒，报 `Plaintext http to 192.168.0.33 would expose your code on the LAN`。这是设计如斯：目标地址是 RFC1918（允许），但明文出本机就可能被同网段设备抓包。解法：`~/.config/cline-local/network.json` 写 `{ "lanPlainHttp": true }` 并重载窗口；想保留加密则用 SSH 隧道（`ssh -N -L 8080:127.0.0.1:8080 主机`，然后填 `http://127.0.0.1:8080/v1`）或给服务端配证书（`caCertPath` / `pinSha256`）。隧道已做成可直接安装的单元（`systemd/model-tunnel.service` + `model-tunnel.env`）。开启 `lanPlainHttp` 后扩展会日志提示一次：被允许的明文连接不会失败，不提示就无法察觉数据在局域网上是裸的（`onNetworkNotice`，启动日志同时列出当前生效的策略开关）。
 2. 首次打开侧栏报 `Could not register service worker: InvalidStateError: … The document is in an invalid state`。**已确认原因**：VS Code 配置目录里残留的 service worker 缓存；完全退出后删除 `<配置目录>/Service Worker`（如 `~/.config/Code/Service Worker`）即恢复正常，用户机器已实测。与离线层无关；能报出 `local-cline.claude-dev` 就说明扩展已激活、视图已注册。官方 `saoudrizwan.claude-dev` 未安装时不存在视图 ID 冲突。
 
 ### 0.1 产品名与上游链接

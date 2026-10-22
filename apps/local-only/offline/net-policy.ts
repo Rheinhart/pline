@@ -99,6 +99,30 @@ export function getNetworkOptions(): Readonly<NetworkOptions> {
 const denials: string[] = [];
 let sink: ((message: string) => void) | undefined;
 
+/**
+ * Allowances worth stating out loud. A denial is visible because the request
+ * fails, but a permitted plaintext connection fails silently *well*: the data
+ * simply travels unencrypted, so the operator cannot notice that a convenience
+ * option is in effect. Each message is reported once per session.
+ */
+const notices: string[] = [];
+let noticeSink: ((message: string) => void) | undefined;
+
+export function onNetworkNotice(listener: (message: string) => void): () => void {
+  noticeSink = listener;
+  for (const message of notices) listener(message);
+  return () => {
+    noticeSink = undefined;
+  };
+}
+
+function notice(message: string): void {
+  if (notices.includes(message)) return;
+  notices.push(message);
+  if (notices.length > 20) notices.shift();
+  noticeSink?.(message);
+}
+
 /** Subscribe to denials so they can be shown in a local log. Returns an unsubscribe. */
 export function onNetworkDenial(listener: (message: string) => void): () => void {
   sink = listener;
@@ -202,9 +226,14 @@ export function assertUrlAllowed(value: string | URL): Target {
     if (!isPrivateHost(host)) {
       deny(`${url.hostname} is not a loopback or private LAN address; this build never connects to the internet.`);
     }
-    if (protocol === "http:" && !isLoopbackHost(host) && !options.lanPlainHttp) {
-      deny(
-        `Plaintext http to ${host} would expose your code on the LAN. Use https, or set "lanPlainHttp": true in ${networkConfigFile}, then reload the window.`,
+    if (protocol === "http:" && !isLoopbackHost(host)) {
+      if (!options.lanPlainHttp) {
+        deny(
+          `Plaintext http to ${host} would expose your code on the LAN. Use https, or set "lanPlainHttp": true in ${networkConfigFile}, then reload the window.`,
+        );
+      }
+      notice(
+        `Plaintext http to ${host}:${portOf(url)} is allowed by lanPlainHttp, so prompts and code travel unencrypted on the LAN. To encrypt without changing the server, forward it over SSH and use http://127.0.0.1:${portOf(url)}/… instead.`,
       );
     }
   }

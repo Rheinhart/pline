@@ -1,0 +1,41 @@
+# SSH tunnel from this machine to the local model server, so the model endpoint
+# can be reached as http://127.0.0.1:<port> and the traffic is encrypted by SSH
+# regardless of how the network is routed.
+#
+# That last part is the reason this exists. A corporate VPN in full-tunnel mode
+# can steal the default route, and then a request to a 192.168.x.x address may
+# leave the house and come back. Loopback never leaves the machine, and the
+# payload inside SSH stays encrypted either way — so this works with a plain-HTTP
+# server, without a certificate, and without turning the plaintext-LAN option on.
+#
+# Install (user unit, no root):
+#
+#   mkdir -p ~/.config/systemd/user ~/.config/cline-local
+#   cp apps/local-only/systemd/model-tunnel.env ~/.config/cline-local/tunnel.env
+#   $EDITOR ~/.config/cline-local/tunnel.env          # user and address
+#   cp apps/local-only/systemd/model-tunnel.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now model-tunnel
+#   loginctl enable-linger "$USER"      # keep it running after logout
+#
+# SSH key login to the model server must already work, and a missing key should
+# surface as a failing service rather than a password prompt, hence BatchMode.
+
+[Unit]
+Description=SSH tunnel to the local model server (port ${TUNNEL_PORT})
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=%h/.config/cline-local/tunnel.env
+ExecStart=/usr/bin/ssh -N -T \
+  -o BatchMode=yes \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  -L 127.0.0.1:${TUNNEL_PORT}:127.0.0.1:${TUNNEL_PORT} \
+  ${TUNNEL_TARGET}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

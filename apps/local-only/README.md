@@ -164,3 +164,22 @@ code --install-extension apps/local-only/dist/release/pline-0.1.2.vsix
 ```
 
 网络配置文件路径不变：`~/.config/cline-local/network.json`。
+
+## 让传输加密(推荐的接法)
+
+非回环地址强制 https 是硬规则;若模型服务只有明文 http,又想要加密,**不必给服务端配证书**——用 SSH 隧道把它接到回环:
+
+```bash
+mkdir -p ~/.config/systemd/user ~/.config/cline-local
+cp apps/local-only/systemd/model-tunnel.env ~/.config/cline-local/tunnel.env
+$EDITOR ~/.config/cline-local/tunnel.env          # 改用户与地址
+cp apps/local-only/systemd/model-tunnel.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now model-tunnel
+loginctl enable-linger "$USER"                     # 不加这条,退出登录后隧道会被停
+```
+
+设置里填 `http://127.0.0.1:8080/v1`,`network.json` 里**不要**开 `lanPlainHttp`。这样隧道断了会立刻报连接被拒绝,而不是悄悄退化成明文链路。
+
+为什么这样对 VPN 也成立:回环那段永不出本机,跨机部分装在 SSH 里。全隧道 VPN 若抢走了默认路由,`192.168.x.x` 的请求可能先出家门再绕回来——`ip route get <模型地址>` 可以看出走的是物理网卡还是 `utun`/`tun`/`wg`。SSH 内容在这两种路由下都是加密的。
+
+开着 `lanPlainHttp` 时,扩展会在 Output 面板打印一次提示(`[cline-local] Plaintext http to … is allowed by lanPlainHttp …`),因为**被允许的明文请求不会失败**,不提示就没人知道数据正在局域网上裸奔。启动日志也会把当前生效的策略开关一并列出。
