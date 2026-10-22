@@ -120,26 +120,37 @@ server.addService(connectionPkg.host.CoreConnectionService.service, {
 			}
 			if (message.response) {
 				const response = message.response
-				const id = response.request_id
-				const tracked = pending.get(id)
+				const tracked = pending.get(response.request_id)
 				if (!tracked) return
 				if (response.error) {
-					tracked.reject(new Error(response.error))
-					pending.delete(id)
+					tracked.onError(new Error(response.error))
+					pending.delete(response.request_id)
 					return
 				}
+				// The core always sends message_json_chunk, bounded; a payload ends at
+				// message_json_complete, and the request ends at completed.
+				let payload
 				if (response.message_json != null) {
-					tracked.payload = response.message_json
+					payload = response.message_json
 				} else if (response.message_json_chunk != null) {
 					tracked.chunks.push(Buffer.from(response.message_json_chunk).toString("utf8"))
+					if (response.message_json_complete) {
+						payload = tracked.chunks.join("")
+						tracked.chunks = []
+					}
 				}
+				if (payload != null) tracked.onPayload(JSON.parse(payload))
 				if (response.completed) {
-					tracked.resolve(tracked.payload ?? tracked.chunks.join(""))
-					pending.delete(id)
+					tracked.onEnd()
+					pending.delete(response.request_id)
 				}
 				return
 			}
-			if (message.cancel) pending.delete(message.cancel.request_id)
+			if (message.cancel) {
+				const cancelled = pending.get(message.cancel.request_id)
+				if (cancelled) cancelled.onEnd()
+				pending.delete(message.cancel.request_id)
+			}
 		})
 		call.on("error", (error) => console.log(`[shim] core connection error: ${error.message}`))
 		call.on("end", () => {
@@ -149,15 +160,28 @@ server.addService(connectionPkg.host.CoreConnectionService.service, {
 	},
 })
 
-function askCore(service, method, messageJson, isStreaming = false) {
-	const requestId = crypto.randomBytes(8).toString("hex")
+// Sends one controller call over the core connection. A streaming call fires
+// onPayload once per logical payload and then onEnd when the core closes it.
+function sendToCore(service, method, messageJson, isStreaming, handlers) {
+	if (!coreStream) {
+		handlers.onError(new Error("core connection is not ready"))
+		return
+	}
+	const requestId = handlers.requestId || crypto.randomBytes(8).toString("hex")
+	pending.set(requestId, { chunks: [], ...handlers })
+	coreStream.write({ request: { request_id: requestId, service, method, message_json: messageJson, is_streaming: isStreaming } })
+}
+
+function askCore(service, method, messageJson) {
 	return new Promise((resolve, reject) => {
-		if (!coreStream) {
-			reject(new Error("core connection is not ready"))
-			return
-		}
-		pending.set(requestId, { resolve, reject, chunks: [] })
-		coreStream.write({ request: { request_id: requestId, service, method, message_json: messageJson, is_streaming: isStreaming } })
+		let answer
+		sendToCore(service, method, messageJson, false, {
+			onPayload: (payload) => {
+				answer = payload
+			},
+			onEnd: () => resolve(answer),
+			onError: reject,
+		})
 	})
 }
 
@@ -214,6 +238,115 @@ function shutdownServer() {
 	} catch {}
 }
 
+// ---------------------------------------------------------------- web bridge
+// Serves the standalone webview and carries its messages to the core. This is
+// the piece the JetBrains host will do with JCEF: inject standalonePostMessage,
+// and deliver host messages back as window message events.
+const BRIDGE_SCRIPT = `<script>
+(() => {
+  const ws = new WebSocket("ws://" + location.host + "/cline-bridge")
+  const queued = []
+  ws.addEventListener("open", () => queued.splice(0).forEach((m) => ws.send(m)))
+  ws.addEventListener("message", (event) => window.postMessage(JSON.parse(event.data), "*"))
+  window.standalonePostMessage = (json) => {
+    if (ws.readyState === 1) ws.send(json)
+    else queued.push(json)
+  }
+  window.__clineBridge = () => ws.readyState
+})()
+</script>`
+
+function startWebBridge() {
+  const root = process.env.WEBVIEW_DIR
+  if (!root) return
+  const http = require("http")
+  const fs = require("fs")
+  const WebSocket = require("ws")
+  const types = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript",
+    ".css": "text/css",
+    ".json": "application/json",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".ttf": "font/ttf",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+  }
+
+  const server = http.createServer((request, response) => {
+    const relative = request.url === "/" ? "index.html" : request.url.split("?")[0].replace(/^\//, "")
+    const file = path.join(root, relative)
+    if (!file.startsWith(root) || !fs.existsSync(file)) {
+      response.writeHead(404)
+      response.end("not found")
+      return
+    }
+    let body = fs.readFileSync(file)
+    if (relative.endsWith("index.html")) {
+      body = Buffer.from(String(body).replace("</head>", `${BRIDGE_SCRIPT}</head>`))
+    }
+    response.writeHead(200, { "content-type": types[path.extname(file)] || "application/octet-stream" })
+    response.end(body)
+  })
+
+  const sockets = new WebSocket.Server({ noServer: true })
+  server.on("upgrade", (request, socket, head) => {
+    if (!request.url.startsWith("/cline-bridge")) {
+      socket.destroy()
+      return
+    }
+    sockets.handleUpgrade(request, socket, head, (client) => handleBridgeClient(client))
+  })
+
+  function handleBridgeClient(client) {
+    console.log("[bridge] webview connected")
+    client.on("message", async (raw) => {
+      let message
+      try {
+        message = JSON.parse(String(raw))
+      } catch {
+        return
+      }
+      if (message.type === "grpc_request_cancel") {
+        coreStream?.write({ cancel: { request_id: message.grpc_request_cancel.request_id } })
+        return
+      }
+      if (message.type !== "grpc_request") return
+      const request = message.grpc_request
+      const id = request.request_id
+      const log = `${request.service}.${request.method}${request.is_streaming ? " (stream)" : ""}`
+      sendToCore(request.service, request.method, JSON.stringify(request.message ?? {}), Boolean(request.is_streaming), {
+        requestId: id,
+        onPayload: (payload) => {
+          console.log(`[bridge] ${log} -> payload forwarded`)
+          // A unary response must not claim to be a stream; the webview resolves
+          // on the first frame with a message either way, but the host that ships
+          // should be exact.
+          send(client, id, payload, Boolean(request.is_streaming))
+        },
+        onEnd: () => send(client, id, undefined, false),
+        onError: (error) => {
+          console.log(`[bridge] ${log} -> error: ${error.message}`)
+          client.send(JSON.stringify({ type: "grpc_response", grpc_response: { request_id: id, error: error.message, is_streaming: false } }))
+        },
+      })
+    })
+    client.on("close", () => console.log("[bridge] webview disconnected"))
+  }
+
+  function send(client, requestId, payload, streaming) {
+    if (client.readyState !== 1) return
+    const response = { request_id: requestId, is_streaming: streaming }
+    if (payload !== undefined) response.message = payload
+    client.send(JSON.stringify({ type: "grpc_response", grpc_response: response }))
+  }
+
+  server.listen(Number(process.env.WEB_PORT || 26060), "127.0.0.1", () =>
+    console.log(`[bridge] webview at http://127.0.0.1:${process.env.WEB_PORT || 26060}`),
+  )
+}
+
 server.bindAsync(HOST_BRIDGE_ADDRESS, grpc.ServerCredentials.createInsecure(), (error, port) => {
 	if (error) {
 		console.error(`[shim] cannot listen on ${HOST_BRIDGE_ADDRESS}: ${error.message}`)
@@ -221,6 +354,11 @@ server.bindAsync(HOST_BRIDGE_ADDRESS, grpc.ServerCredentials.createInsecure(), (
 	}
 	console.log(`[shim] host bridge serving on 127.0.0.1:${port}`)
 	const core = startCore()
+	startWebBridge()
+
+	if (!process.env.PROBE) {
+		return
+	}
 
 	const probe = async () => {
 		if (!coreStream) {
