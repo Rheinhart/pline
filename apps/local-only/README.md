@@ -104,3 +104,32 @@ bun -F @cline/local-only package
 `test` 使用临时合成项目和回环测试服务验证网络边界与实际 Cline 工具循环，不发送真实项目源码。运行测试需要允许监听回环地址；完整沙箱验证需要 Linux user namespace。类型检查覆盖本发行版和实际引用的上游 Agent；Java 编译使用真正的 JetBrains 接口。
 
 模块审计清单位于 `dist/release/core-inputs.json` 与 `vscode-inputs.json`。静态审计、集成测试和本地安装检查不等于所有 IDE 版本、Fedora 配置或实际模型服务都已验证；使用前按目标机器和模型进行验收。
+
+## 离线 VSIX 的已知问题
+
+适用于 `local-cline.claude-dev`（离线版原版扩展，见 `IMPLEMENTATION.zh-CN.md` 第 0 节）。
+
+首次打开侧栏可能出现：
+
+```
+Error loading webview provided by 'local-cline.claude-dev':
+Error: Could not register service worker: InvalidStateError: … The document is in an invalid state.
+```
+
+这是 VS Code 配置目录里残留的 Webview service worker 缓存，**不是**离线层的问题（能报出插件 ID 说明扩展已激活、视图已注册）。完全退出所有窗口后删除该目录再启动即可：
+
+```bash
+rm -rf ~/.config/Code/Service\ Worker     # 分支版路径不同，例如 ~/.config/Cursor
+```
+
+## 机器级禁网开关
+
+扩展只能保证 Cline 自己不出公网。**编辑器本体**（市场、更新检查、内置扩展遥测）和**模型机自身的出网**在扩展管不到的地方，需要机器级开关：
+
+```bash
+sudo apps/local-only/scripts/lan-only.sh off     # 断公网，局域网与路由器 DNS 照常
+apps/local-only/scripts/lan-only.sh status
+sudo apps/local-only/scripts/lan-only.sh on
+```
+
+它给默认路由加一条 `blackhole`（IPv4 与 IPv6），非本地网段立即返回 `Network unreachable`；不持有状态，也不与 ufw/docker/nftables 规则冲突，删掉这条路由即恢复。局限：不区分程序与端口，只作用于主路由表。模型机上更精细的做法是只约束模型服务本身（systemd drop-in：`IPAddressAllow=127.0.0.0/8 192.168.0.0/24 ::1 fe80::/10` 加 `IPAddressDeny=any`），这样其余开发工具照常联网。

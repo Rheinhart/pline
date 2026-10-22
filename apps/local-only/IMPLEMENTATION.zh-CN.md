@@ -27,7 +27,22 @@
 真机上碰到的两个坑（都不是网络层问题）：
 
 1. 非回环的明文 http 默认被拒，报 `Plaintext http to 192.168.0.33 would expose your code on the LAN`。这是设计如斯：目标地址是 RFC1918（允许），但明文出本机就可能被同网段设备抓包。解法：`~/.config/cline-local/network.json` 写 `{ "lanPlainHttp": true }` 并重载窗口；想保留加密则用 SSH 隧道（`ssh -N -L 8080:127.0.0.1:8080 主机`，然后填 `http://127.0.0.1:8080/v1`）或给服务端配证书（`caCertPath` / `pinSha256`）。
-2. 首次打开侧栏报 `Could not register service worker: InvalidStateError: … The document is in an invalid state`。这是 VS Code 本身的 Webview 注册问题（完全退出后清理配置目录下的 `Service Worker` 缓存可解），与离线层无关；能报出 `local-cline.claude-dev` 就说明扩展已激活、视图已注册。官方 `saoudrizwan.claude-dev` 未安装时不存在视图 ID 冲突。
+2. 首次打开侧栏报 `Could not register service worker: InvalidStateError: … The document is in an invalid state`。**已确认原因**：VS Code 配置目录里残留的 service worker 缓存；完全退出后删除 `<配置目录>/Service Worker`（如 `~/.config/Code/Service Worker`）即恢复正常，用户机器已实测。与离线层无关；能报出 `local-cline.claude-dev` 就说明扩展已激活、视图已注册。官方 `saoudrizwan.claude-dev` 未安装时不存在视图 ID 冲突。
+
+### 0.1 机器级开关（命令与其他程序的禁网保证）
+
+扩展层只能保证 **Cline 自己**不出公网。有两块构造上盖不到：
+
+1. **编辑器本体**：VS Code 会自己访问市场、更新检查、内置扩展遥测；
+2. **模型机**：代码和历史都存在那台上，它的出网不受笔记本约束。
+
+因此提供一个机器级开关 `scripts/lan-only.sh off|on|status`：给默认路由加一条 `blackhole`（IPv4 与 IPv6），非本地网段立即`Network unreachable`，局域网与路由器 DNS 照常。选它而不是防火墙规则的理由是：不持有状态、不与 ufw/docker/nftables 冲突、删一条路由即恢复。局限：不区分程序与端口，只管主路由表；日常用这个开关，需要更细策略时另置防火墙。
+
+> 本机实测受限：此云 VM 无免密 sudo，也禁用了用户命名空间（`unshare -rn` 失败），所以**仅语法与只读的 `status` 路径已验证**，`off`/`on` 两条 `ip` 命令尚待在用户机器上执行。（同一个限制也说明了为何第二条路线没沿用 0.1.2 的 `bwrap --unshare-all` 命令沙箱。）
+
+对模型机更合适的做法是只约束模型服务本身（其余开发工具继续可用），例如 systemd drop-in：`IPAddressAllow=127.0.0.0/8 192.168.0.0/24 ::1 fe80::/10` + `IPAddressDeny=any`。
+
+一个实测发现：模型地址 `192.168.0.33` 就是本仓库所在的这台机器（`python` 监听 `0.0.0.0:8080`，OpenAI 兼容、带 API key）。这台机器同时有**公网 IPv6** 与 **tailscale0**（100.124.x，属 CGNAT）。两个推论：笔记本侧的开关管不到它；若走 Tailscale 地址访问模型，流量可能经公网 DERP 中继，就不再是“只在家内”——插件默认也**不允许** 100.64.0.0/10（需显式 `allowCgnat`），所以继用 `192.168.0.33` 是对的。
 
 尚未做：把账户/市场/云会话等入口改为“离线不可用”提示（现在只是连不上，不是看不到）；命令沙箱接入；CLion 宿主对接；本文件其余部分的文档改写。`0.1.2` 的两个旧安装包仍是之前已验证的产物。
 
