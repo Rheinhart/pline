@@ -6,7 +6,29 @@
 
 当前安装包：VS Code 1.101+；CLion 2024.3+ 的 Linux x86_64 插件（以 243 平台接口编译）。命令隔离针对 Linux / Fedora，其他系统的命令工具拒绝执行。没有隐蔽运行、关闭公司安全软件或绕过 VPN 的功能。
 
+## 开发机（B）配置清单
+
+“开发机”指装插件、跑 VS Code／CLion 的那台;模型服务所在的机器记为 **A**。下面六步是完整路径,细节在后面的对应章节。
+
+| 步 | 做什么 | 详见 |
+| --- | --- | --- |
+| 1 | 选一个包并校验:`dist/release/offline/pline-<版本>.vsix`(原版界面与功能)或 `pline-minimal-<版本>.vsix` + `pline-minimal-clion-<版本>-linux-x64.zip`(最小客户端) | 《名称与产物》 |
+| 2 | 首次安装先清旧身份:`code --uninstall-extension local-cline.claude-dev`;CLion 卸载旧的 `Cline Local` 插件 | 《名称》 |
+| 3 | 装 VSIX / 插件,填模型端点与模型 ID(例如 `http://192.168.0.33:8080/v1`) | 《安装与配置》 |
+| 4 | 选定加密方式(**推荐** SSH 隧道 + 回环,不开 `lanPlainHttp`) | 《让传输加密》与《A 方案…》 |
+| 5 | 需要调策略时写 `~/.config/cline-local/network.json`(只能收紧,不能放行公网) | 《机器级禁网开关》 |
+| 6 | 验收:发一个任务,看 Output 面板的 `[cline-local]` 行 | 本节下方 |
+
+**验收看两行就够**(Output 面板选本插件的输出通道):
+
+- `… (lanPlainHttp=false, …)` —— 当前生效的策略开关;
+- **不应出现** `[cline-local] Plaintext http to …` —— 出现了说明仍有流量在打局域网 IP(隧道没被用上)。
+
+界面打不开、图标没出现、地址被拒这三类常见情况的成因与解法,在《离线 VSIX 的已知问题》与《让传输加密》里。`IMPLEMENTATION.zh-CN.md` 第 8 节是 0.1.2 当时发布的安装记录(图标仍叫 `Cline Local`),保留作历史,不作为当前指引。
+
 ## 安装与配置
+
+> 本节是最小客户端的原始说明;两条路线通用的顺序看上一节。
 
 1. 从 `dist/release/` 取出 `.vsix` 或 CLion 的 `-linux-x64.zip`，用同目录的 `SHA256SUMS` 校验（`sha256sum -c SHA256SUMS`）。
 2. VS Code 使用本地 VSIX 安装，打开一个本地项目，点击活动栏的 **Pline** 图标（已发布的旧包显示为 **Cline Local**）；也可执行 **Pline: 打开本地 Agent**。如果从旧版升级后看不到图标，执行 **Developer: Reload Window**，并检查活动栏图标是否被隐藏。CLion 使用 **Settings → Plugins → Install Plugin from Disk** 安装 ZIP，打开 **Pline** 工具窗口。
