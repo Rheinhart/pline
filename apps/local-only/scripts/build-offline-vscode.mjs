@@ -267,6 +267,16 @@ async function main() {
   fs.mkdirSync(out, { recursive: true });
   fs.cpSync(pluginRuntime, path.join(out, "plugin-runtime"), { recursive: true });
 
+  // Upstream ships an on-premise endpoints file for enterprise deployments and
+  // switches to "self-hosted" mode when it finds one: telemetry, error reporting
+  // and remote feature flags then stay off by the upstream mechanism. Pointing
+  // the three endpoints at a closed loopback port means no configuration in the
+  // package contains a public address, and a missed call fails instantly.
+  await fs.promises.writeFile(
+    path.join(out, "endpoints.json"),
+    `${JSON.stringify({ appBaseUrl: "http://127.0.0.1:1", apiBaseUrl: "http://127.0.0.1:1", mcpBaseUrl: "http://127.0.0.1:1/v1/mcp" }, null, 2)}\n`,
+  );
+
   const result = await esbuild.build({
     absWorkingDir: app,
     bundle: true,
@@ -283,6 +293,10 @@ async function main() {
       "process.env.IS_STANDALONE": JSON.stringify("false"),
       "process.env.IS_DEV": JSON.stringify("false"),
       "process.env.CLINE_ROLLOUT_VARIANT": JSON.stringify(""),
+      // Marks the offline distribution: it tightens the webview CSP to packaged
+      // resources, because the webview is a browser context the Node-side
+      // address policy cannot cover.
+      "process.env.CLINE_LOCAL_OFFLINE": JSON.stringify("true"),
       // Telemetry can never be switched on later by an environment variable:
       // these are inlined, so the OpenTelemetry provider is never constructed.
       "process.env.CLINE_ENVIRONMENT": JSON.stringify("selfHosted"),

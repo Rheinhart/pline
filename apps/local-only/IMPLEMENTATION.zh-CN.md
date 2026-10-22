@@ -14,11 +14,15 @@
   - `stubs/` 替换 PostHog 客户端、遥测/错误/功能开关工厂、SDK 核心的账号功能开关与 PostHog provider、浏览器工具（puppeteer/下载 Chrome 全部出局）。
 - `stubs/` 替换 PostHog 客户端、遥测/错误/功能开关工厂、SDK 核心的账号功能开关与 PostHog provider、浏览器工具（puppeteer/下载 Chrome 全部出局）、以及**云端模型 provider**：`@cline/llms` 是一个打包好的 dist，无法逐个换掉 vendor 模块，因此改为在 **npm 包名**层面拦截：Anthropic / Google / Vertex / Bedrock（`@aws-sdk`、`@smithy`）/ SAP / Google Auth / OpenRouter 换成会报本地错误的桩，Langfuse 与 OTEL 导出器换成静默桩。设置界面仍然列出这些 provider，选中并开始时得到中文错误，不会联网。本机可用的入口（OpenAI 兼容、Ollama、LM Studio、LiteLLM）保持原样。另外 `stubs/cloud-provider.ts` 顶替 src 构建下的 vendor 模块。
 - `scripts/build-offline-vscode.mjs`：编译 `offline/entry.ts` → `dist/offline-vscode/extension.js`，并对模块清单做审计（禁止清单 22 项：分析、追踪导出器、错误上报、浏览器自动化、云端模型 SDK）。当前：**2765 个模块、34.8 MiB**（未压缩；原版为 5819 / 54 MiB），审计通过；剩下的 108 个 `@opentelemetry/api|core` 一类模块本身不含传输层，审计会单独列出说明。
+- `scripts/package-offline-vscode.mjs`：手工生成 VSIX（不用 vsce，不下载），独立身份 `local-cline.claude-dev`（publisher 隔开，插件名保持 `claude-dev` 以便上游派生的命令/视图 ID 完全不变），产物 `dist/release/cline-local-0.1.2.vsix`（12.7 MiB）+ `SHA256SUMS-offline-vscode`。已用 `code --install-extension` 安装到独立目录并用 `--list-extensions` 确认：`local-cline.claude-dev@0.1.2`。
+- Webview CSP：`WebviewProvider.ts` 里加了一个 4 行的条件分支（`process.env.CLINE_LOCAL_OFFLINE === "true"`，普通构建不定义该变量，行为不变）。这一项是**真正的隐私必需**：Webview 是浏览器上下文，Node 层的地址策略管不到它，原 CSP 的 `img-src … https:` 会让模型回答里的远程图片自动去拉取。离线 CSP 只允许随包资源（`connect-src 'self' + cspSource`）。
+- `endpoints.json`：随包写入三个云端基址为 `http://127.0.0.1:1`（已关闭的回环端口），同时触发上游 self-hosted 机制；配置里不再出现公网地址，漏网的调用会立即失败而不是去公网。
+- `entry.ts` 启动时清除 `CLINE_*` / `OTEL_*` / `CLINE_STORAGE_*` 环境变量（只动 Cline 自己的名字，不碰代理设置），覆盖编译宏无法匹配的 `process?.env?.X` 写法；环境变量不能重新开启已删除的能力。
 - `scripts/smoke-offline-vscode.mjs`：注入最小 `vscode` 模块后**实际 require 打包产物**，验证整个模块图能求值、`activate`/`deactivate` 存在。它已经抓到一个真实的循环依赖初始化 bug（`node/net` 在策略模块就绪前读取选项）。
 - `scripts/test-offline.mjs` + `tests/offline-net.test.ts`：7 项网络边界测试全部通过（含回环服务实际收发、重定向不跟随、代理环境变量无效、公网地址在发出前被拒、裸 socket/DNS 同策略）。
-- 根 `package.json` 新增 `build:local-offline`、`test:local-offline`、`smoke:local-offline`。
+- 根 `package.json` 新增 `build:local-offline`、`test:local-offline`、`smoke:local-offline`、`package:local-offline`。
 
-尚未做：把账户/市场/云会话/远程配置/历史上传等 UI 入口摸干净（现在只是“连不上”，不是“看不到”）、`endpoints.json`（self-hosted 模式，端点指向回环）、CSP 收紧、VSIX 打包与**在 VS Code 里真实安装跑一轮任务**、命令沙箱接入、CLion 宿主对接、以及本文件其余部分的文档改写。因此**第二条路线目前还不能安装使用**，`0.1.2` 的两个安装包仍是当前可用产物。
+尚未做：**在真实 VS Code 窗口里跑一轮任务**（本环境 `DISPLAY=:1` 对 agent shell 不可用，VS Code 开不了窗口；VSIX 安装与加载已验证）；把账户/市场/云会话等入口改为“离线不可用”提示（现在只是连不上，不是看不到）；命令沙箱接入；CLion 宿主对接；本文件其余部分的文档改写。`0.1.2` 的两个旧安装包仍是之前已验证的产物。
 
 ---
 

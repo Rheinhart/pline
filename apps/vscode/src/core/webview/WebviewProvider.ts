@@ -96,6 +96,27 @@ export abstract class WebviewProvider {
 				*/
 		const nonce = getNonce()
 
+		// Cline Local (offline distribution): the webview is a browser context, so the
+		// extension host's address policy cannot cover it. Restricting the CSP to the
+		// packaged resources is what keeps a Markdown image in a model's answer, or a
+		// stray fetch in a settings panel, from reaching the internet. In the normal
+		// build CLINE_LOCAL_OFFLINE is not defined, so nothing changes there.
+		const offlineCsp = process.env.CLINE_LOCAL_OFFLINE === "true"
+		const cspContent = offlineCsp
+			? `default-src 'none';
+				connect-src 'self' ${this.getCspSource()};
+				font-src ${this.getCspSource()} data:;
+				style-src ${this.getCspSource()} 'unsafe-inline';
+				img-src ${this.getCspSource()} data:;
+				media-src ${this.getCspSource()};
+				script-src 'nonce-${nonce}' 'unsafe-eval';`
+			: `default-src 'none';
+				connect-src https://*.posthog.com https://*.cline.bot;
+				font-src ${this.getCspSource()} data:;
+				style-src ${this.getCspSource()} 'unsafe-inline';
+				img-src ${this.getCspSource()} https: data:;
+				script-src 'nonce-${nonce}' 'unsafe-eval';`
+
 		// Tip: Install the es6-string-html VS Code extension to enable code highlighting below
 		return /*html*/ `
 			<!DOCTYPE html>
@@ -105,12 +126,7 @@ export abstract class WebviewProvider {
 				<meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no">
 				<meta name="theme-color" content="#000000">
 				<link rel="stylesheet" type="text/css" href="${stylesUrl}">
-				<meta http-equiv="Content-Security-Policy" content="default-src 'none';
-					connect-src https://*.posthog.com https://*.cline.bot; 
-					font-src ${this.getCspSource()} data:; 
-					style-src ${this.getCspSource()} 'unsafe-inline'; 
-					img-src ${this.getCspSource()} https: data:; 
-					script-src 'nonce-${nonce}' 'unsafe-eval';">
+				<meta http-equiv="Content-Security-Policy" content="${cspContent}">
 				<title>Cline</title>
 			</head>
 			<body>
