@@ -110,7 +110,7 @@ fs.writeFileSync(
 - Webview 的内容安全策略只允许随包资源，模型回答里的远程图片不会被加载。
 - 没有自动更新，也没有在线商店身份；请从磁盘安装并手动替换。
 
-配置与限制详见源码仓库中的 \`apps/local-only/README.md\` 与 \`IMPLEMENTATION.zh-CN.md\`。
+安装与配置的一步步操作见 **\`apps/local-only/CLIENT-SETUP.zh-CN.md\`**（开发机配置指南）；构建与实现取舍见同目录的 \`README.md\` 与 \`IMPLEMENTATION.zh-CN.md\`。
 
 ## 模型端点
 

@@ -1,6 +1,6 @@
 # 开发机（B）配置指南 · 手把手
 
-**适用**：在自己的电脑上用 Pline 连一台局域网模型服务。全程约 10 分钟。
+**适用**：在自己的电脑上用 Pline 连一台局域网模型服务。全程约 10 分钟。VS Code 与 CLion 的步骤共用，**CLion 用户看第 3 步里的小节**。
 
 - **A** = 跑模型服务的机器（例：`192.168.0.33`，端口 `8080`）
 - **B** = 你正在用的这台电脑（装 Pline、开 VS Code）
@@ -68,6 +68,17 @@ rm -rf ~/.config/Code/Service\ Worker      # 分支版换目录：~/.config/Curs
 ```
 
 重开 VS Code 即可。
+
+---
+
+### 只用 CLion？把第 2、3 步换成这四条
+
+1. **取包**：`pline-clion-<版本>-linux-x64.zip`（约 37 MB，**Linux x86_64 专用**）。**不要解压**，直接传整个 zip 到 B。
+2. **安装**：CLion → `Settings/Preferences` → `Plugins` → 右上⚙ → **Install Plugin from Disk…** → 选那个 zip → 提示重启时点 **Restart IDE**。
+3. **打开工具窗口**：右侧应出现 **Pline**；没有就去 `View → Tool Windows → Pline`。（仍没有：先确认 `Plugins → Installed` 里 Pline 已启用，且 IDE 版本≥ **2024.3**，插件声明的是 `since-build="243"`。）
+4. **填端点**：面板里的设置项与第 4 步一样（Base URL 以 `/v1` 结尾、真实 Model ID、需要时填 Key）；第 5 步的加密规则、`network.json` 位置对 CLion **同样适用**（同一套核心，读同一个文件）。
+
+**要说清楚的一点**：CLion 这边的界面是那个**简洁的工具窗口**，不是 VS Code 里那个原版 Cline 界面。原版界面目前只做到了 VS Code 宿主；JetBrains 宿主是另一套实现（同一个核心 + 自己的 UI），带自己的 `bwrap` 命令沙箱。
 
 ---
 

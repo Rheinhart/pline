@@ -93,8 +93,13 @@ await fs.copyFile(core, join(plugin, "bin/pline"));
 await fs.copyFile(join(dist, "server.mjs"), join(plugin, "bin/server.mjs"));
 await fs.chmod(join(plugin, "bin/pline"), 0o755);
 await fs.copyFile(join(repo, "LICENSE"), join(plugin, "LICENSE"));
-await fs.copyFile(join(app, "README.md"), join(plugin, "README.md"));
-await fs.copyFile(join(app, "IMPLEMENTATION.zh-CN.md"), join(plugin, "IMPLEMENTATION.zh-CN.md"));
+// Docs are copied at package time, so a zip built before a documentation change
+// ships the old text — which is how a zip built from the pre-rename README ended up
+// telling CLion users to install a `pline-minimal-*.vsix` that no longer exists.
+// Rebuild this package after touching any of these files.
+for (const doc of ["README.md", "IMPLEMENTATION.zh-CN.md", "CLIENT-SETUP.zh-CN.md"]) {
+  await fs.copyFile(join(app, doc), join(plugin, doc));
+}
 // Bun's bundled license inventory must be prepared explicitly; packaging never downloads.
 const bunLicenses = await fs.readFile(join(javaDeps, "bun-LICENSE.md"), "utf8");
 const gsonLicense = await fs.readFile(join(javaDeps, "gson-LICENSE.txt"), "utf8");
