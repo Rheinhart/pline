@@ -1,5 +1,25 @@
 # Cline Local 改造实施记录
 
+## 0. 进行中：第二条实现路线（离线版 = 原版扩展裁剪）
+
+上面的 `0.1.x` 是**自写的精简客户端**（独立界面、4 个工具）。根据后续明确的目标——**去掉联网，但尽量保留原版的功能和界面**——正在增加第二条路线：直接编译原版 `apps/vscode` 扩展，只在编译期替换联网模块。
+
+已落地（截至 2026-10-22，未提交，未打包成 VSIX）：
+
+- `apps/local-only/offline/`：
+  - `net-policy.ts` 地址策略（回环 + RFC1918 + IPv6 ULA + 可选 CGNAT；非回环强制 https；拒绝公网、链路本地、云元数据、域名与含糊写法；可选内网 CA 与 SPKI 指纹固定）。
+  - `network-settings.ts` 读取 `~/.config/cline-local/network.json`（`lanPlainHttp`、`allowLanDns`、`allowCgnat`、`caCertPath`、`pinSha256`、`strictSockets`；不能把策略放宽到公网）。
+  - `net-guard.ts` 顶替 `@shared/net`：无代理、不跟随重定向、请求体产生之前就拒绝。
+  - `node/{net,tls,dns,dgram,http,https}.ts` 只在离线包内替换这些模块，策略在 connect 层再次生效（不影响扩展宿主里的其他插件）。
+  - `stubs/` 替换 PostHog 客户端、遥测/错误/功能开关工厂、SDK 核心的账号功能开关与 PostHog provider、浏览器工具（puppeteer/下载 Chrome 全部出局）。
+- `scripts/build-offline-vscode.mjs`：编译 `offline/entry.ts` → `dist/offline-vscode/extension.js`，并对模块清单做审计（分析/遥测/浏览器自动化/云端厂商 SDK 不许进入包）。当前：4963 个模块、44.6 MiB（未压缩），审计通过；仍会打印云端网关 SDK 的剩余数量（经 `@cline/llms` 入口带入，等 provider 白名单一步删除）。
+- `scripts/test-offline.mjs` + `tests/offline-net.test.ts`：7 项网络边界测试全部通过（含回环服务实际收发、重定向不跟随、代理环境变量无效、公网地址在发出前被拒、裸 socket/DNS 同策略）。
+- 根 `package.json` 新增 `build:local-offline`、`test:local-offline`。
+
+尚未做：provider 白名单（删除 bedrock/anthropic/google/sap 等云端网关代码）、把账户/市场/云会话/远程配置/历史上传等 UI 入口摘掉、`endpoints.json`（self-hosted 模式，端点指向回环）、CSP 收紧、VSIX 打包与真实安装验证、命令沙箱接入、CLion 宿主对接、以及本文件其余部分的文档改写。因此**第二条路线目前还不能安装使用**，`0.1.2` 的两个安装包仍是当前可用产物。
+
+---
+
 记录日期：2026-10-21。发行版版本：`0.1.2`。
 
 本记录描述此次实际写入仓库的改动，与最初的[需求方案](../../LOCAL_ONLY_FORK_PLAN.zh-CN.md)区分。安装和日常使用见[README](README.md)。
