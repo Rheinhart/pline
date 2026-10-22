@@ -7,8 +7,8 @@ import type { Edit } from "./workspace";
 import { validateSettings, type ModelSettings } from "./policy";
 
 export interface Settings extends ModelSettings { commands?: boolean }
-export interface SettingsDraft { baseUrl: string; model: string; maxTokens: number; contextWindow: number; temperature: number | null; reasoningEffort: string; commands: boolean; hasApiKey: boolean }
-export interface SettingsUpdate { baseUrl: string; model: string; maxTokens: number; contextWindow?: number; temperature?: number | null; reasoningEffort?: ModelSettings["reasoningEffort"]; commands: boolean; apiKey?: string; clearApiKey?: boolean }
+export interface SettingsDraft { baseUrl: string; model: string; maxTokens: number; contextWindow: number; temperature: number | null; topP: number | null; frequencyPenalty: number | null; presencePenalty: number | null; seed: number | null; reasoningEffort: string; commands: boolean; hasApiKey: boolean }
+export interface SettingsUpdate { baseUrl: string; model: string; maxTokens: number; contextWindow?: number; temperature?: number | null; topP?: number | null; frequencyPenalty?: number | null; presencePenalty?: number | null; seed?: number | null; reasoningEffort?: ModelSettings["reasoningEffort"]; commands: boolean; apiKey?: string; clearApiKey?: boolean }
 export const configPath = () => path.join(homedir(), ".config", "cline-local", "config.json");
 
 export async function privateDirectory(directory: string): Promise<void> {
@@ -29,7 +29,7 @@ export async function ensureConfig(filename = configPath()): Promise<string> {
 }
 export async function readSettings(configFile = configPath()): Promise<Settings> {
   const input = await readConfigObject(configFile);
-  return { ...validateSettings({ baseUrl: input.baseUrl as string, model: input.model as string, apiKey: input.apiKey as string | undefined, maxTokens: input.maxTokens as number | undefined, contextWindow: input.contextWindow as number | undefined, temperature: input.temperature as number | undefined, reasoningEffort: input.reasoningEffort as ModelSettings["reasoningEffort"] }), commands: input.commands === true };
+  return { ...validateSettings({ baseUrl: input.baseUrl as string, model: input.model as string, apiKey: input.apiKey as string | undefined, maxTokens: input.maxTokens as number | undefined, contextWindow: input.contextWindow as number | undefined, temperature: input.temperature as number | undefined, topP: input.topP as number | undefined, frequencyPenalty: input.frequencyPenalty as number | undefined, presencePenalty: input.presencePenalty as number | undefined, seed: input.seed as number | undefined, reasoningEffort: input.reasoningEffort as ModelSettings["reasoningEffort"] }), commands: input.commands === true };
 }
 async function readConfigObject(configFile: string): Promise<Record<string, unknown>> {
   const filename = await ensureConfig(configFile);
@@ -49,6 +49,10 @@ export async function readSettingsDraft(configFile = configPath()): Promise<Sett
     maxTokens: Number.isInteger(input.maxTokens) ? input.maxTokens as number : 4096,
     contextWindow: Number.isInteger(input.contextWindow) ? input.contextWindow as number : 131072,
     temperature: typeof input.temperature === "number" ? input.temperature : null,
+    topP: typeof input.topP === "number" ? input.topP : null,
+    frequencyPenalty: typeof input.frequencyPenalty === "number" ? input.frequencyPenalty : null,
+    presencePenalty: typeof input.presencePenalty === "number" ? input.presencePenalty : null,
+    seed: typeof input.seed === "number" ? input.seed : null,
     reasoningEffort: typeof input.reasoningEffort === "string" ? input.reasoningEffort : "none",
     commands: input.commands === true,
     hasApiKey: typeof input.apiKey === "string" && input.apiKey.length > 0,
@@ -60,6 +64,10 @@ export async function saveSettings(update: SettingsUpdate, configFile = configPa
     baseUrl: update.baseUrl, model: update.model, maxTokens: update.maxTokens,
     contextWindow: update.contextWindow ?? (current.contextWindow as number | undefined),
     temperature: update.temperature === null ? undefined : (update.temperature ?? (current.temperature as number | undefined)),
+    topP: update.topP === null ? undefined : (update.topP ?? (current.topP as number | undefined)),
+    frequencyPenalty: update.frequencyPenalty === null ? undefined : (update.frequencyPenalty ?? (current.frequencyPenalty as number | undefined)),
+    presencePenalty: update.presencePenalty === null ? undefined : (update.presencePenalty ?? (current.presencePenalty as number | undefined)),
+    seed: update.seed === null ? undefined : (update.seed ?? (current.seed as number | undefined)),
     reasoningEffort: update.reasoningEffort ?? (current.reasoningEffort as ModelSettings["reasoningEffort"]),
     apiKey: update.clearApiKey ? "" : update.apiKey || (typeof current.apiKey === "string" ? current.apiKey : ""),
   });

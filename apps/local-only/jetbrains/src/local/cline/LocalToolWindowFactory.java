@@ -122,6 +122,13 @@ public final class LocalToolWindowFactory implements ToolWindowFactory {
             } catch (IOException error) { busy = false; append("\n发送失败：" + error.getMessage() + "\n"); }
         }
         private static String string(JsonObject object, String key) { return object.has(key) && !object.get(key).isJsonNull() ? object.get(key).getAsString() : ""; }
+        private static void addOptionalNumber(JsonObject config, String name, JTextField field, double minimum, double maximum) {
+            String text = field.getText().trim();
+            if (text.isEmpty()) return;
+            double number = Double.parseDouble(text);
+            if (!Double.isFinite(number) || number < minimum || number > maximum) throw new IllegalArgumentException(name + " 超出范围。");
+            config.addProperty(name, number);
+        }
         private void handle(JsonObject event) {
             switch (string(event, "type")) {
                 case "text" -> append(string(event, "text"));
@@ -182,6 +189,10 @@ public final class LocalToolWindowFactory implements ToolWindowFactory {
                 JTextField contextWindow = new JTextField(value.has("contextWindow") ? value.get("contextWindow").getAsString() : "131072", 35);
                 JTextField maxTokens = new JTextField(value.has("maxTokens") ? value.get("maxTokens").getAsString() : "4096", 35);
                 JTextField temperature = new JTextField(value.has("temperature") ? value.get("temperature").getAsString() : "", 35);
+                JTextField topP = new JTextField(string(value, "topP"), 35);
+                JTextField frequencyPenalty = new JTextField(string(value, "frequencyPenalty"), 35);
+                JTextField presencePenalty = new JTextField(string(value, "presencePenalty"), 35);
+                JTextField seed = new JTextField(string(value, "seed"), 35);
                 JComboBox<String> reasoning = new JComboBox<>(new String[]{"none", "low", "medium", "high", "xhigh"});
                 reasoning.setSelectedItem(value.has("reasoningEffort") ? value.get("reasoningEffort").getAsString() : "none");
                 JCheckBox commands = new JCheckBox("启用 Linux 禁网命令（需本机 bubblewrap）", value.has("commands") && value.get("commands").getAsBoolean());
@@ -191,10 +202,17 @@ public final class LocalToolWindowFactory implements ToolWindowFactory {
                 form.add(new JLabel("上下文窗口 token（4096–2000000）")); form.add(contextWindow);
                 form.add(new JLabel("最大输出 token（128–32768）")); form.add(maxTokens);
                 form.add(new JLabel("Temperature（0–2，留空由模型决定）")); form.add(temperature);
+                form.add(new JLabel("Top P（大于 0 且不超过 1，留空由模型决定）")); form.add(topP);
+                form.add(new JLabel("频率惩罚（-2–2，留空由模型决定）")); form.add(frequencyPenalty);
+                form.add(new JLabel("存在惩罚（-2–2，留空由模型决定）")); form.add(presencePenalty);
+                form.add(new JLabel("随机种子（0–2147483647，留空由模型决定）")); form.add(seed);
+                form.add(new JLabel("以上可选参数仅在填写时发送，需模型服务支持。"));
                 form.add(new JLabel("Reasoning Effort（仅适用支持该参数的模型）")); form.add(reasoning);
                 form.add(new JLabel("API Key（留空保留已保存值）")); form.add(key); form.add(clearKey); form.add(commands);
                 form.add(new JLabel("发送任务时，相关代码上下文会传给此模型。"));
-                if (JOptionPane.showConfirmDialog(this, form, "本地模型设置", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) return;
+                JScrollPane scroll = new JScrollPane(form);
+                scroll.setPreferredSize(new Dimension(440, 580));
+                if (JOptionPane.showConfirmDialog(this, scroll, "本地模型设置", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) return;
                 int context = Integer.parseInt(contextWindow.getText().trim());
                 int outputLimit = Integer.parseInt(maxTokens.getText().trim());
                 if (context < 4096 || context > 2_000_000 || outputLimit < 128 || outputLimit > 32768 || context <= outputLimit) throw new IllegalArgumentException("上下文窗口或输出 token 超出范围。");
@@ -206,6 +224,15 @@ public final class LocalToolWindowFactory implements ToolWindowFactory {
                 value.addProperty("apiKey", clearKey.isSelected() ? "" : key.getPassword().length == 0 ? savedKey : new String(key.getPassword()));
                 value.addProperty("contextWindow", context); value.addProperty("maxTokens", outputLimit);
                 if (!tempText.isEmpty()) value.addProperty("temperature", temp);
+                addOptionalNumber(value, "topP", topP, Double.MIN_VALUE, 1);
+                addOptionalNumber(value, "frequencyPenalty", frequencyPenalty, -2, 2);
+                addOptionalNumber(value, "presencePenalty", presencePenalty, -2, 2);
+                String seedText = seed.getText().trim();
+                if (!seedText.isEmpty()) {
+                    long seedValue = Long.parseLong(seedText);
+                    if (seedValue < 0 || seedValue > 2_147_483_647L) throw new IllegalArgumentException("随机种子超出范围。");
+                    value.addProperty("seed", seedValue);
+                }
                 value.addProperty("reasoningEffort", (String) reasoning.getSelectedItem()); value.addProperty("commands", commands.isSelected());
                 Path temporary = Files.createTempFile(directory, "config-", ".tmp");
                 Files.setPosixFilePermissions(temporary, PosixFilePermissions.fromString("rw-------"));

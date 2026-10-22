@@ -7,6 +7,10 @@ export interface ModelSettings {
   maxTokens?: number;
   contextWindow?: number;
   temperature?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  seed?: number;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
 }
 
@@ -46,7 +50,12 @@ export function validateSettings(input: ModelSettings): Readonly<ModelSettings> 
   const contextWindow = input.contextWindow ?? 131072;
   if (!Number.isInteger(contextWindow) || contextWindow < 4096 || contextWindow > 2_000_000 || contextWindow <= maxTokens) throw new Error("contextWindow must be 4096–2000000 and larger than maxTokens.");
   if (input.temperature !== undefined && (typeof input.temperature !== "number" || !Number.isFinite(input.temperature) || input.temperature < 0 || input.temperature > 2)) throw new Error("temperature must be 0–2 or unset.");
+  if (input.topP !== undefined && (typeof input.topP !== "number" || !Number.isFinite(input.topP) || input.topP <= 0 || input.topP > 1)) throw new Error("topP must be greater than 0 and at most 1, or unset.");
+  for (const [name, value] of [["frequencyPenalty", input.frequencyPenalty], ["presencePenalty", input.presencePenalty]] as const) {
+    if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value) || value < -2 || value > 2)) throw new Error(`${name} must be -2–2 or unset.`);
+  }
+  if (input.seed !== undefined && (!Number.isInteger(input.seed) || input.seed < 0 || input.seed > 2_147_483_647)) throw new Error("seed must be an integer from 0 to 2147483647, or unset.");
   const reasoningEffort = input.reasoningEffort ?? "none";
   if (!["none", "low", "medium", "high", "xhigh"].includes(reasoningEffort)) throw new Error("Invalid reasoning effort.");
-  return Object.freeze({ baseUrl: input.baseUrl, model: input.model.trim(), apiKey: input.apiKey, maxTokens, contextWindow, temperature: input.temperature, reasoningEffort });
+  return Object.freeze({ baseUrl: input.baseUrl, model: input.model.trim(), apiKey: input.apiKey, maxTokens, contextWindow, temperature: input.temperature, topP: input.topP, frequencyPenalty: input.frequencyPenalty, presencePenalty: input.presencePenalty, seed: input.seed, reasoningEffort });
 }

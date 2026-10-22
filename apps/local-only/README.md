@@ -10,7 +10,7 @@
 
 1. 从 `dist/release/` 取出 `.vsix` 或 `cline-local-clion-…-linux-x64.zip`，用随包 `SHA256SUMS` 校验。
 2. VS Code 使用本地 VSIX 安装，打开一个本地项目，点击活动栏的 **Cline Local** 图标；也可执行 **Cline Local: 打开本地 Agent**。如果从旧版升级后看不到图标，执行 **Developer: Reload Window**，并检查活动栏图标是否被隐藏。CLion 使用 **Settings → Plugins → Install Plugin from Disk** 安装 ZIP，打开 **Cline Local** 工具窗口。
-3. 在侧边栏点击“模型设置”，填写地址、模型 ID、上下文窗口、最大输出 token、Temperature、Reasoning Effort 和可选 API Key；保存后新任务生效。VS Code 可以手动从**已保存的私有端点**读取 `/v1/models` 列表，也可以输入自定义 ID。配置保存在 `~/.config/cline-local/config.json`，目录权限 `0700`，文件权限 `0600`。Webview 不会读回已保存的 API Key 明文。不读取项目配置、原版 Cline 凭证、系统代理或云模型环境变量。
+3. 在侧边栏点击“模型设置”，填写地址、模型 ID、上下文窗口、最大输出 token，以及可选的 Temperature、Top P、频率惩罚、存在惩罚、随机种子、Reasoning Effort 和 API Key；保存后新任务生效。VS Code 可以手动从**已保存的私有端点**读取 `/v1/models` 列表，也可以输入自定义 ID。配置保存在 `~/.config/cline-local/config.json`，目录权限 `0700`，文件权限 `0600`。Webview 不会读回已保存的 API Key 明文。不读取项目配置、原版 Cline 凭证、系统代理或云模型环境变量。
 4. 设置一个模型端点和模型 ID，开始新任务。没有在线模型发现、模型下载或公网回退；使用模型服务已提供的准确模型 ID。
 
 ```json
@@ -21,6 +21,10 @@
   "contextWindow": 131072,
   "maxTokens": 4096,
   "temperature": 0.25,
+  "topP": 0.9,
+  "frequencyPenalty": 0,
+  "presencePenalty": 0,
+  "seed": 42,
   "reasoningEffort": "none",
   "commands": false
 }
@@ -28,7 +32,7 @@
 
 示例地址必须替换。支持 OpenAI 兼容 Chat Completions、SSE 和函数工具调用；本机端点用 `127.0.0.1` 或 `[::1]`。内网使用规范的私有字面 IP，拒绝域名、公网、链路本地、云元数据地址、URL 凭证、任意路径和重定向。任务只请求该端点的 `/v1/chat/completions`；手动列出模型只请求 `/v1/models`。HTTPS 强制证书校验，未提供关闭校验选项。
 
-模型列表按钮只在用户点击时请求同一私有地址的 `/v1/models`，不自动扫描网络。Temperature 留空则不发送该参数；Reasoning Effort 设为 `none` 时不发送 `reasoning_effort`。上下文窗口使用 UTF-8 字节数做保守限制，因为离线包没有每种本地模型的 tokenizer。原版设置中的图片能力、价格和云端专属参数未接入当前纯文本本地核心，不能通过这些选项启用相应功能。
+模型列表按钮只在用户点击时请求同一私有地址的 `/v1/models`，不自动扫描网络。Temperature、Top P、频率惩罚、存在惩罚和随机种子留空则不发送对应参数；Reasoning Effort 设为 `none` 时不发送 `reasoning_effort`。这些可选参数需要本地服务支持，服务不支持时应留空。上下文窗口使用 UTF-8 字节数做保守限制，因为离线包没有每种本地模型的 tokenizer。原版设置中的图片能力、价格和云端专属参数未接入当前纯文本本地核心，不能通过这些选项启用相应功能。
 
 **发送任务意味着相关提示词、代码和工具输出会发给这个端点。** 内网模型仍属于另一台设备，不能称为“代码不离开本机”；需要完全不离开本机时只配置本机模型。模型服务器本身的外连与日志应由部署方限制。插件不会更改 VPN、路由、防火墙或公司管理策略，也不能保证连接对设备管理软件不可见。
 

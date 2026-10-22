@@ -42,17 +42,25 @@ test("settings UI saves a private config and never returns the credential", asyn
   const blank = await readSettingsDraft(filename);
   assert.equal(blank.baseUrl, "");
   assert.equal(blank.hasApiKey, false);
-  const first = await saveSettings({ baseUrl: "http://192.168.1.50:8000/v1", model: "local", maxTokens: 4096, contextWindow: 65536, temperature: 0, reasoningEffort: "medium", commands: false, apiKey: "secret" }, filename);
+  const first = await saveSettings({ baseUrl: "http://192.168.1.50:8000/v1", model: "local", maxTokens: 4096, contextWindow: 65536, temperature: 0, topP: 0.9, frequencyPenalty: -0.5, presencePenalty: 0.5, seed: 42, reasoningEffort: "medium", commands: false, apiKey: "secret" }, filename);
   assert.equal(first.hasApiKey, true);
   assert.equal(JSON.stringify(first).includes("secret"), false);
   assert.equal(first.contextWindow, 65536);
   assert.equal(first.temperature, 0);
+  assert.equal(first.topP, 0.9);
+  assert.equal(first.frequencyPenalty, -0.5);
+  assert.equal(first.presencePenalty, 0.5);
+  assert.equal(first.seed, 42);
   assert.equal(first.reasoningEffort, "medium");
   assert.equal((await fs.stat(filename)).mode & 0o077, 0);
   const second = await saveSettings({ baseUrl: first.baseUrl, model: "local-2", maxTokens: 2048, commands: false, apiKey: "" }, filename);
   assert.equal(second.model, "local-2");
   assert.equal((await readSettings(filename)).apiKey, "secret");
   assert.equal((await readSettings(filename)).contextWindow, 65536);
+  assert.equal((await readSettings(filename)).seed, 42);
+  const cleared = await saveSettings({ baseUrl: first.baseUrl, model: "local-2", maxTokens: 2048, topP: null, frequencyPenalty: null, presencePenalty: null, seed: null, commands: false }, filename);
+  assert.equal(cleared.topP, null);
+  assert.equal(cleared.seed, null);
   await assert.rejects(saveSettings({ baseUrl: "https://api.openai.com/v1", model: "bad", maxTokens: 4096, commands: false }, filename));
   assert.equal((await readSettings(filename)).model, "local-2");
   await saveSettings({ baseUrl: first.baseUrl, model: "local", maxTokens: 4096, commands: false, clearApiKey: true }, filename);
@@ -75,14 +83,24 @@ test("model options validate and affect the local Chat Completions request", asy
     req.on("data", (chunk) => { body += chunk; });
     req.on("end", () => { received = JSON.parse(body); sse(res, { content: "ok" }); });
   });
-  const settings = { baseUrl: local, model: "test", maxTokens: 1024, contextWindow: 8192, temperature: 0.25, reasoningEffort: "high" as const };
+  const settings = { baseUrl: local, model: "test", maxTokens: 1024, contextWindow: 8192, temperature: 0.25, topP: 0.85, frequencyPenalty: -0.25, presencePenalty: 0.75, seed: 123, reasoningEffort: "high" as const };
   for await (const _ of await createLocalModel(settings).stream(request)) {}
   assert.equal(received.max_tokens, 1024);
   assert.equal(received.temperature, 0.25);
+  assert.equal(received.top_p, 0.85);
+  assert.equal(received.frequency_penalty, -0.25);
+  assert.equal(received.presence_penalty, 0.75);
+  assert.equal(received.seed, 123);
   assert.equal(received.reasoning_effort, "high");
+  for await (const _ of await createLocalModel({ baseUrl: local, model: "test" }).stream(request)) {}
+  for (const key of ["temperature", "top_p", "frequency_penalty", "presence_penalty", "seed", "reasoning_effort"]) assert.equal(Object.hasOwn(received, key), false, key);
   await assert.rejects(async () => { for await (const _ of await createLocalModel(settings).stream({ ...request, messages: [{ role: "user", content: [{ type: "text", text: "x".repeat(8192) }] }] } as any)) {} }, /configured window/u);
   assert.throws(() => validateSettings({ ...settings, contextWindow: 512 }));
   assert.throws(() => validateSettings({ ...settings, temperature: 3 }));
+  assert.throws(() => validateSettings({ ...settings, topP: 0 }));
+  assert.throws(() => validateSettings({ ...settings, frequencyPenalty: 3 }));
+  assert.throws(() => validateSettings({ ...settings, presencePenalty: -3 }));
+  assert.throws(() => validateSettings({ ...settings, seed: 1.5 }));
   assert.throws(() => validateSettings({ ...settings, reasoningEffort: "invalid" as any }));
 });
 

@@ -70,6 +70,10 @@ export function createLocalModel(settings: ModelSettings): AgentModel {
       const body = JSON.stringify({
         model: config.model, stream: true, max_tokens: config.maxTokens,
         ...(config.temperature !== undefined ? { temperature: config.temperature } : {}),
+        ...(config.topP !== undefined ? { top_p: config.topP } : {}),
+        ...(config.frequencyPenalty !== undefined ? { frequency_penalty: config.frequencyPenalty } : {}),
+        ...(config.presencePenalty !== undefined ? { presence_penalty: config.presencePenalty } : {}),
+        ...(config.seed !== undefined ? { seed: config.seed } : {}),
         ...(config.reasoningEffort !== "none" ? { reasoning_effort: config.reasoningEffort } : {}),
         messages: [...(request.systemPrompt ? [{ role: "system", content: request.systemPrompt }] : []), ...wireMessages(request.messages)],
         ...(request.tools.length ? { tools: request.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } })) } : {}),
