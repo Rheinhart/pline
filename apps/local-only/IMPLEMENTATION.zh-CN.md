@@ -14,7 +14,7 @@
   - `stubs/` 替换 PostHog 客户端、遥测/错误/功能开关工厂、SDK 核心的账号功能开关与 PostHog provider、浏览器工具（puppeteer/下载 Chrome 全部出局）。
 - `stubs/` 替换 PostHog 客户端、遥测/错误/功能开关工厂、SDK 核心的账号功能开关与 PostHog provider、浏览器工具（puppeteer/下载 Chrome 全部出局）、以及**云端模型 provider**：`@cline/llms` 是一个打包好的 dist，无法逐个换掉 vendor 模块，因此改为在 **npm 包名**层面拦截：Anthropic / Google / Vertex / Bedrock（`@aws-sdk`、`@smithy`）/ SAP / Google Auth / OpenRouter 换成会报本地错误的桩，Langfuse 与 OTEL 导出器换成静默桩。设置界面仍然列出这些 provider，选中并开始时得到中文错误，不会联网。本机可用的入口（OpenAI 兼容、Ollama、LM Studio、LiteLLM）保持原样。另外 `stubs/cloud-provider.ts` 顶替 src 构建下的 vendor 模块。
 - `scripts/build-offline-vscode.mjs`：编译 `offline/entry.ts` → `dist/offline-vscode/extension.js`，并对模块清单做审计（禁止清单 22 项：分析、追踪导出器、错误上报、浏览器自动化、云端模型 SDK）。当前：**2765 个模块、34.8 MiB**（未压缩；原版为 5819 / 54 MiB），审计通过；剩下的 108 个 `@opentelemetry/api|core` 一类模块本身不含传输层，审计会单独列出说明。
-- `scripts/package-offline-vscode.mjs`：手工生成 VSIX（不用 vsce，不下载），独立身份 `local-cline.claude-dev`（publisher 隔开，插件名保持 `claude-dev` 以便上游派生的命令/视图 ID 完全不变），产物 `dist/release/cline-local-0.1.2.vsix`（12.7 MiB）+ `SHA256SUMS-offline-vscode`。已用 `code --install-extension` 安装到独立目录并用 `--list-extensions` 确认：`local-cline.claude-dev@0.1.2`。
+- `scripts/package-offline-vscode.mjs`：手工生成 VSIX（不用 vsce，不下载），写入 `dist/release/offline/`（与最小客户端的产物分目录，以前同名的 `cline-local-<version>.vsix` 曾互相覆盖）。身份为 **`local.pline`**，产品名 **Pline**；因为上游从 `package.json` 的 `name` 派生命令与视图 ID，重命名同时发生在编译期与 `contributes`（`scripts/identity.mjs` 统一生成）。产物 `pline-0.2.0.vsix`（12.7 MiB）+ `SHA256SUMS-offline-vscode`。已用 `code --install-extension` 安装到独立目录并用 `--list-extensions` 确认：`local.pline@0.2.0`。
 - Webview CSP：`WebviewProvider.ts` 里加了一个 4 行的条件分支（`process.env.CLINE_LOCAL_OFFLINE === "true"`，普通构建不定义该变量，行为不变）。这一项是**真正的隐私必需**：Webview 是浏览器上下文，Node 层的地址策略管不到它，原 CSP 的 `img-src … https:` 会让模型回答里的远程图片自动去拉取。离线 CSP 只允许随包资源（`connect-src 'self' + cspSource`）。
 - `endpoints.json`：随包写入三个云端基址为 `http://127.0.0.1:1`（已关闭的回环端口），同时触发上游 self-hosted 机制；配置里不再出现公网地址，漏网的调用会立即失败而不是去公网。
 - `entry.ts` 启动时清除 `CLINE_*` / `OTEL_*` / `CLINE_STORAGE_*` 环境变量（只动 Cline 自己的名字，不碰代理设置），覆盖编译宏无法匹配的 `process?.env?.X` 写法；环境变量不能重新开启已删除的能力。
@@ -56,7 +56,9 @@
 
 一个实测发现：模型地址 `192.168.0.33` 就是本仓库所在的这台机器（`python` 监听 `0.0.0.0:8080`，OpenAI 兼容、带 API key）。这台机器同时有**公网 IPv6** 与 **tailscale0**（100.124.x，属 CGNAT）。两个推论：笔记本侧的开关管不到它；若走 Tailscale 地址访问模型，流量可能经公网 DERP 中继，就不再是“只在家内”——插件默认也**不允许** 100.64.0.0/10（需显式 `allowCgnat`），所以继用 `192.168.0.33` 是对的。
 
-尚未做：把账户/市场/云会话等入口改为“离线不可用”提示（现在只是连不上，不是看不到）；命令沙箱接入；CLion 宿主对接；本文件其余部分的文档改写。`0.1.2` 的两个旧安装包仍是之前已验证的产物。
+尚未做：把账户/市场/云会话等入口改为“离线不可用”提示（现在只是连不上，不是看不到）；命令沙箱接入（现由机器级开关覆盖，见 §0.3）；CLion 宿主对接；本文件其余部分的文档改写。
+
+**命名现状**：两条路线均已改名 Pline（VS Code `local.pline` / `local.pline-minimal`，JetBrains `local.pline.agent`）；但 `dist/release/` 里现存的最小客户端产物（`cline-local-0.1.2.vsix`、`cline-local-clion-0.1.2-linux-x64.zip`）是**改名前**构建的，仍是旧身份，与 `SHA256SUMS` 一致且功能正常；要得到 Pline 身份需在有 JetBrains SDK jar 的机器上重打。数据目录**故意保留** `~/.config/cline-local/`：两条路线共用，改名会让现有配置与会话记录静默失效。下文第 8 节的安装步骤描述的是当时发布的 0.1.2 包（包括旧的图标名 `Cline Local`），保留作历史记录。
 
 ---
 
