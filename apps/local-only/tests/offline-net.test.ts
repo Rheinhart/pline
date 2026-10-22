@@ -53,10 +53,21 @@ test("public, link-local and ambiguous targets are refused", () => {
 });
 
 test("plaintext http off-loopback needs an explicit opt-in", () => {
-  denied(() => assertUrlAllowed("http://192.168.1.50:8000/v1"), "http on the LAN is refused by default");
+  // The real home-LAN case: an OpenAI-compatible server on the LAN over http.
+  const lan = "http://192.168.0.33:8080/v1";
+  let message = "";
+  try {
+    assertUrlAllowed(lan);
+  } catch (error) {
+    message = (error as Error).message;
+  }
+  denied(() => assertUrlAllowed(lan), "http on the LAN is refused by default");
+  // The message has to name the file the operator can actually edit.
+  assert.match(message, /lanPlainHttp/, "denial explains the opt-in");
+  assert.match(message, /network\.json/, "denial names a config file path");
   setNetworkOptions({ lanPlainHttp: true });
   try {
-    assert.equal(assertUrlAllowed("http://192.168.1.50:8000/v1").protocol, "http:");
+    assert.equal(assertUrlAllowed(lan).protocol, "http:");
   } finally {
     setNetworkOptions({ lanPlainHttp: false });
   }

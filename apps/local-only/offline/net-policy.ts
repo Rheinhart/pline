@@ -39,6 +39,21 @@ const DEFAULTS: NetworkOptions = {
 
 let options: NetworkOptions = { ...DEFAULTS };
 
+/**
+ * Named in denial messages so the operator knows which file to edit. Set by
+ * network-settings at load time; the default is the POSIX location so a message
+ * stays actionable even if that module never ran.
+ */
+let networkConfigFile = "~/.config/cline-local/network.json";
+
+export function setNetworkConfigFile(file: string): void {
+  networkConfigFile = file;
+}
+
+export function networkConfigFilePath(): string {
+  return networkConfigFile;
+}
+
 const LOOPBACK = new BlockList();
 LOOPBACK.addSubnet("127.0.0.0", 8, "ipv4");
 LOOPBACK.addAddress("::1", "ipv6");
@@ -188,7 +203,9 @@ export function assertUrlAllowed(value: string | URL): Target {
       deny(`${url.hostname} is not a loopback or private LAN address; this build never connects to the internet.`);
     }
     if (protocol === "http:" && !isLoopbackHost(host) && !options.lanPlainHttp) {
-      deny(`Plaintext http to ${host} would expose your code on the LAN. Use https, or set lanPlainHttp in the local network config.`);
+      deny(
+        `Plaintext http to ${host} would expose your code on the LAN. Use https, or set "lanPlainHttp": true in ${networkConfigFile}, then reload the window.`,
+      );
     }
   }
   return { protocol, host, port: portOf(url) };

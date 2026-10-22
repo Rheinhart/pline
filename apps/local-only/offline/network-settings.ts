@@ -11,7 +11,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { setNetworkOptions, type NetworkOptions } from "./net-policy";
+import { setNetworkConfigFile, setNetworkOptions, type NetworkOptions } from "./net-policy";
 
 export const NETWORK_CONFIG_FILE = path.join(
   process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"),
@@ -82,6 +82,7 @@ function readOptions(): { options: Partial<NetworkOptions>; problems: string[] }
 
 /** Apply the operator file and return problems to log. Missing file is fine. */
 export function applyNetworkConfig(): string[] {
+  setNetworkConfigFile(NETWORK_CONFIG_FILE);
   const { options, problems } = readOptions();
   setNetworkOptions(options);
   return problems;
