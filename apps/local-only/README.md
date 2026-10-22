@@ -242,3 +242,22 @@ curl -sS http://127.0.0.1:8080/v1/models          # 在 B 上,应返回模型列
 ```bash
 LOCAL_ONLY_JAVA_DEPS=/path/to/idea/lib bun -F @cline/local-only package
 ```
+
+准备这个依赖目录只需要下载,不需要安装 IDE:
+
+```bash
+mkdir -p ~/cache/pline-jetbrains/lib && cd ~/cache/pline-jetbrains
+# 平台 jar(取一个 IntelliJ 发行包的 lib/ 顶层 jar 即可)
+curl -sLO https://download.jetbrains.com/idea/ideaIC-2024.3.tar.gz
+tar -xzf ideaIC.tar.gz -C . --wildcards '*/lib/*.jar'
+cp idea-IC-*/lib/*.jar lib/
+# 编译器与运行时依赖、两份许可证
+curl -sL -o lib/ecj.jar  https://repo1.maven.org/maven2/org/eclipse/jdt/ecj/3.42.0/ecj-3.42.0.jar
+curl -sL -o lib/gson.jar https://repo1.maven.org/maven2/com/google/code/gson/gson/2.11.0/gson-2.11.0.jar
+curl -sL -o lib/bun-LICENSE.md  https://raw.githubusercontent.com/oven-sh/bun/main/LICENSE.md
+curl -sL -o lib/gson-LICENSE.txt https://www.apache.org/licenses/LICENSE-2.0.txt
+
+LOCAL_ONLY_JAVA_DEPS="$PWD/lib" bun -F @cline/local-only package
+```
+
+**classpath 是目录里的全部 jar,不是固定名字列表**：平台 jar 的文件名在不同 IDE 版本间会变(2024.3 是 `app.jar`/`util.jar`/`util-8.jar`/`annotations.jar`,旧版是 `core.jar`/`ide.jar`/`extensions.jar`…),写死名字会在升级 IDE 后突然编译失败。只有 `gson.jar` 是按名字取用的,因为它要随插件一起发布。

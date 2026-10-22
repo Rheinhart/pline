@@ -21,20 +21,27 @@ function run(command, args, cwd = app) {
 }
 await fs.mkdir(release, { recursive: true });
 
-const jarNames = ["core", "ide", "ide-core", "util", "extensions", "util-progress", "annotations", "gson"];
-
-// Fail before writing anything. Packaging downloads nothing, so the JetBrains SDK
-// jars and the two license files must already be present. Aborting at the java
-// step instead left a half-replaced release directory and a SHA256SUMS that no
-// longer described it, which reads as a corrupted build rather than an
-// unfinished one.
-const needed = [...jarNames.map((name) => `${name}.jar`), "ecj.jar", "bun-LICENSE.md", "gson-LICENSE.txt"];
-const missing = needed.filter((name) => !existsSync(join(javaDeps, name)));
-if (missing.length > 0) {
+// Fail before writing anything. Packaging downloads nothing, so the compiler, the
+// runtime gson dependency and the two license files must already be present.
+// Aborting at the java step instead left a half-replaced release directory and a
+// SHA256SUMS that no longer described it, which reads as a corrupted build rather
+// than an unfinished one.
+const requiredFiles = ["ecj.jar", "gson.jar", "bun-LICENSE.md", "gson-LICENSE.txt"];
+const missing = requiredFiles.filter((name) => !existsSync(join(javaDeps, name)));
+// The platform classes come from the IDE's own jars, and their file names change
+// between releases (2024.3 has app.jar/util.jar; older layouts had core.jar,
+// ide.jar, extensions.jar…), so the classpath is every jar in the directory
+// rather than a fixed list of names.
+const platformJars = (await fs.readdir(javaDeps).catch(() => []))
+  .filter((name) => name.endsWith(".jar") && name !== "ecj.jar" && name !== "gson.jar")
+  .sort();
+if (missing.length > 0 || platformJars.length === 0) {
+  const want = [...missing];
+  if (platformJars.length === 0) want.push("the IDE platform jars (lib/*.jar of an IntelliJ-based IDE)");
   throw new Error(
-    `JetBrains packaging needs these files in ${javaDeps}: ${missing.join(", ")}.\n` +
-      "Set LOCAL_ONLY_JAVA_DEPS to the lib directory of an installed IntelliJ-based IDE " +
-      "(ecj.jar and the two license files have to sit beside the jars).",
+    `JetBrains packaging needs in ${javaDeps}: ${want.join(", ")}.\n` +
+      "Set LOCAL_ONLY_JAVA_DEPS to a directory holding ecj.jar, gson.jar, the two license files, " +
+      "and the lib/*.jar of an installed IntelliJ-based IDE.",
   );
 }
 // Fresh staging prevents stale files from entering a release; old artifacts remain until replaced.
@@ -80,7 +87,7 @@ const classes = join(staging, "classes");
 await fs.mkdir(join(plugin, "lib"), { recursive: true });
 await fs.mkdir(join(plugin, "bin"), { recursive: true });
 await fs.mkdir(classes, { recursive: true });
-const classpath = jarNames.map((name) => join(javaDeps, `${name}.jar`)).join(delimiter);
+const classpath = ["gson.jar", ...platformJars].map((name) => join(javaDeps, name)).join(delimiter);
 run("java", ["-jar", join(javaDeps, "ecj.jar"), "-17", "-encoding", "UTF-8", "-proc:none", "-classpath", classpath, "-d", classes, join(app, "jetbrains/src/local/cline/LocalToolWindowFactory.java")]);
 await fs.cp(join(app, "jetbrains/resources"), classes, { recursive: true });
 // The manifest version comes from package.json, so a hand-maintained number in

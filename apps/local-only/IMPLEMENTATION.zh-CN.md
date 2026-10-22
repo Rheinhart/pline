@@ -58,7 +58,7 @@
 
 尚未做：把账户/市场/云会话等入口改为“离线不可用”提示（现在只是连不上，不是看不到）；命令沙箱接入（现由机器级开关覆盖，见 §0.3）；CLion 宿主对接；本文件其余部分的文档改写。
 
-**命名现状**：两条路线均已改名 Pline（VS Code `local.pline` / `local.pline-minimal`，JetBrains `local.pline.agent`）；但 `dist/release/` 里现存的最小客户端产物（`cline-local-0.1.2.vsix`、`cline-local-clion-0.1.2-linux-x64.zip`）是**改名前**构建的，仍是旧身份，与 `SHA256SUMS` 一致且功能正常；要得到 Pline 身份需在有 JetBrains SDK jar 的机器上重打。数据目录**故意保留** `~/.config/cline-local/`：两条路线共用，改名会让现有配置与会话记录静默失效。下文第 8 节的安装步骤描述的是当时发布的 0.1.2 包（包括旧的图标名 `Cline Local`），保留作历史记录。
+**命名现状**：两条路线均已改名 Pline 并**已重新打包**。当前产物：`dist/release/offline/pline-0.2.0.vsix`（`local.pline`，原版扩展的离线构建）与 `dist/release/pline-minimal-0.2.0.vsix` + `pline-minimal-clion-0.2.0-linux-x64.zip`（最小客户端，VS Code `local.pline-minimal`、JetBrains `local.pline.agent`，工具窗口 Pline）；jar 内的 `plugin.xml` 已核对为 `local.pline.agent` / `Pline` / `0.2.0`，版本号由脚本从 `package.json` 注入。旧的 `cline-local-0.1.2.vsix` 保留在目录里作为历史产物（`SHA256SUMS` 仍覆盖并校验通过）。数据目录**故意保留** `~/.config/cline-local/`：两条路线共用，改名会让现有配置与会话记录静默失效。下文第 8 节的安装步骤描述的是当时发布的 0.1.2 包（包括旧的图标名 `Cline Local`），保留作历史记录。
 
 ---
 
