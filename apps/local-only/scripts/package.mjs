@@ -64,23 +64,13 @@ for (const [name, file] of [["nanoid", "LICENSE"], ["jsonrepair", "LICENSE.md"],
   notices.push(`\n--- ${name} ---\n${await fs.readFile(join(directory, file), "utf8")}`);
 }
 const noticeText = notices.join("\n");
-const ext = join(staging, "vsix", "extension");
-await fs.mkdir(join(ext, "dist"), { recursive: true });
-await fs.copyFile(join(dist, "extension.cjs"), join(ext, "dist/extension.cjs"));
-await fs.mkdir(join(ext, "assets"), { recursive: true });
-await fs.copyFile(join(app, "vscode/assets/icon.svg"), join(ext, "assets/icon.svg"));
-await fs.copyFile(join(app, "vscode/package.json"), join(ext, "package.json"));
-await fs.copyFile(join(repo, "LICENSE"), join(ext, "LICENSE"));
-await fs.copyFile(join(app, "README.md"), join(ext, "README.md"));
-await fs.copyFile(join(app, "IMPLEMENTATION.zh-CN.md"), join(ext, "IMPLEMENTATION.zh-CN.md"));
-await fs.writeFile(join(ext, "THIRD_PARTY_NOTICES.txt"), noticeText);
-await fs.writeFile(join(staging, "vsix/[Content_Types].xml"), `<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="json" ContentType="application/json"/><Default Extension="cjs" ContentType="application/javascript"/><Default Extension="svg" ContentType="image/svg+xml"/><Default Extension="md" ContentType="text/markdown"/><Default Extension="txt" ContentType="text/plain"/><Default Extension="vsixmanifest" ContentType="text/xml"/><Default Extension="" ContentType="text/plain"/></Types>`);
-await fs.writeFile(join(staging, "vsix/extension.vsixmanifest"), `<?xml version="1.0" encoding="utf-8"?><PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"><Metadata><Identity Language="en-US" Id="pline-minimal" Version="${version}" Publisher="local"/><DisplayName>Pline</DisplayName><Description xml:space="preserve">Local-only coding agent with an explicitly configured private model endpoint.</Description><Tags>local,agent</Tags><Categories>Programming Languages</Categories><GalleryFlags>Public</GalleryFlags><Properties><Property Id="Microsoft.VisualStudio.Code.Engine" Value="^1.101.0"/><Property Id="Microsoft.VisualStudio.Code.ExtensionDependencies" Value=""/><Property Id="Microsoft.VisualStudio.Code.ExtensionPack" Value=""/><Property Id="Microsoft.VisualStudio.Code.ExtensionKind" Value="workspace"/></Properties><License>extension/LICENSE</License></Metadata><Installation><InstallationTarget Id="Microsoft.VisualStudio.Code"/></Installation><Dependencies/><Assets><Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true"/><Asset Type="Microsoft.VisualStudio.Services.Content.Details" Path="extension/README.md" Addressable="true"/></Assets></PackageManifest>`);
-// `pline-minimal-` because the offline build of the original extension ships from
-// this directory too, and identical filenames have already overwritten one another.
-const vsix = `pline-minimal-${version}.vsix`;
-run("zip", ["-q", "-r", join(staging, vsix), "."], join(staging, "vsix"));
-await fs.rename(join(staging, vsix), join(release, vsix));
+
+// No VS Code package from here. The minimal client's VS Code build was retired:
+// the offline build of the original extension (scripts/package-offline-vscode.mjs,
+// dist/release/offline/) covers that host with the original interface and
+// features, and shipping two VS Code products invited the question "which one is
+// mine?" at every install. What remains here is the JetBrains host and the shared
+// core it runs.
 
 const plugin = join(staging, "jetbrains/pline");
 const classes = join(staging, "classes");
@@ -109,7 +99,7 @@ await fs.copyFile(join(app, "IMPLEMENTATION.zh-CN.md"), join(plugin, "IMPLEMENTA
 const bunLicenses = await fs.readFile(join(javaDeps, "bun-LICENSE.md"), "utf8");
 const gsonLicense = await fs.readFile(join(javaDeps, "gson-LICENSE.txt"), "utf8");
 await fs.writeFile(join(plugin, "THIRD_PARTY_NOTICES.txt"), `${noticeText}\n--- Gson ---\n${gsonLicense}\n--- Bun ---\n${bunLicenses}`);
-const jetbrains = `pline-minimal-clion-${version}-linux-x64.zip`;
+const jetbrains = `pline-clion-${version}-linux-x64.zip`;
 run("zip", ["-q", "-r", join(staging, jetbrains), "pline"], join(staging, "jetbrains"));
 await fs.rename(join(staging, jetbrains), join(release, jetbrains));
 // The checksum file describes the whole release directory: a list of only the two
@@ -124,3 +114,4 @@ await fs.copyFile(join(dist, "server.mjs.inputs.json"), join(release, "core-inpu
 await fs.copyFile(join(dist, "extension.cjs.inputs.json"), join(release, "vscode-inputs.json"));
 await fs.rm(staging, { recursive: true, force: true });
 console.log(`Local installation packages: ${release}`);
+console.log("The VS Code package is built by scripts/package-offline-vscode.mjs into dist/release/offline.");

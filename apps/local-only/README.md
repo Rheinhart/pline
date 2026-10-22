@@ -12,7 +12,7 @@
 
 | 步 | 做什么 | 详见 |
 | --- | --- | --- |
-| 1 | 选一个包并校验:`dist/release/offline/pline-<版本>.vsix`(原版界面与功能)或 `pline-minimal-<版本>.vsix` + `pline-minimal-clion-<版本>-linux-x64.zip`(最小客户端) | 《名称与产物》 |
+| 1 | 取两个包并校验:`dist/release/offline/pline-<版本>.vsix`(VS Code)与 `dist/release/pline-clion-<版本>-linux-x64.zip`(CLion) | 《名称与产物》 |
 | 2 | 首次安装先清旧身份:`code --uninstall-extension local-cline.claude-dev`;CLion 卸载旧的 `Cline Local` 插件 | 《名称》 |
 | 3 | 装 VSIX / 插件,填模型端点与模型 ID(例如 `http://192.168.0.33:8080/v1`) | 《安装与配置》 |
 | 4 | 选定加密方式(**推荐** SSH 隧道 + 回环,不开 `lanPlainHttp`) | 《让传输加密》与《A 方案…》 |
@@ -248,18 +248,20 @@ curl -sS http://127.0.0.1:8080/v1/models          # 在 B 上,应返回模型列
 
 ## 名称与产物
 
-发行版统一叫 **Pline**(此前叫 Cline Local)。两条实现路线的产物互不相同,也**不再共用文件名**(曾经共用 `cline-local-<version>.vsix` 时,一条路线覆盖过另一条的产物):
+发行版统一叫 **Pline**(此前叫 Cline Local)。对外只有**两个产物**:
 
-| 路线 | 身份 | 产物 | 版本号来源 |
+| 产品 | 身份 | 产物 | 版本号来源 |
 | --- | --- | --- | --- |
-| 原版扩展的离线构建(功能与界面最全) | VS Code `local.pline`,命令前缀 `pline.` | `dist/release/offline/pline-<版本>.vsix` | `scripts/identity.mjs` 的 `OFFLINE_VERSION` |
-| 最小客户端(VS Code + CLion) | VS Code `local.pline-minimal`;JetBrains 插件 `local.pline.agent`,工具窗口 **Pline** | `dist/release/pline-minimal-<版本>.vsix`、`pline-minimal-clion-<版本>-linux-x64.zip` | `apps/local-only/package.json` 的 `version` |
+| **VS Code**(原版界面与功能) | `local.pline`,命令前缀 `pline.` | `dist/release/offline/pline-<版本>.vsix` | `scripts/identity.mjs` 的 `OFFLINE_VERSION` |
+| **CLion / JetBrains**(Linux x86_64) | JetBrains 插件 `local.pline.agent`,工具窗口 **Pline** | `dist/release/pline-clion-<版本>-linux-x64.zip` | `apps/local-only/package.json` 的 `version` |
+
+**早期手写的“最小客户端”已停止开发,它的 VS Code 包不再发布。** 理由很直接:原版扩展的离线构建已经覆盖 VS Code 宿主,并且界面与功能和官方 Cline 一致;同时发两个 VS Code 产品,只会让每次安装都多一个“我该装哪个”的问题。它的**核心运行时与 JetBrains 宿主保留**——那是 CLion 插件的本体,也带着自己的 `bwrap` 命令沙箱;后续只做维护,不加新功能。`scripts/package.mjs` 仍会编译 VS Code 用的 `dist/extension.cjs`,但不再打包它。
 
 **改名只发生在源码里,已发布的旧产物仍是旧身份**。`dist/release/` 里现存的是改名前构建的 `cline-local-0.1.2.vsix` 与 `cline-local-clion-0.1.2-linux-x64.zip`(内容与 `SHA256SUMS` 一致,功能不受影响);要得到 Pline 身份的最小客户端包,需要在装有 IntelliJ/CLion 的机器上重新打包(见下)。
 
 **配置目录仍是 `~/.config/cline-local/`**,两条路线共用(离线扩展读 `network.json`,最小客户端读 `config.json`,历史在 `~/.local/share/cline-local/`)。目录名保留旧拼写是**有意兼容**,不改名是为了不让你已写好的配置和已有会话记录失效。
 
-改名后重打最小客户端包(需要 JetBrains SDK jar,缺文件时脚本会在写盘前停下并列出缺什么):
+改名后重打 CLion 包(需要 JetBrains SDK jar,缺文件时脚本会在写盘前停下并列出缺什么):
 
 ```bash
 LOCAL_ONLY_JAVA_DEPS=/path/to/idea/lib bun -F @cline/local-only package
