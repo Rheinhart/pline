@@ -1,6 +1,6 @@
 # Pline：本机／内网模型专用发行版（旧名 Cline Local）
 
-完整文件改动、验证结果、Git 提交说明见[中文实施记录](IMPLEMENTATION.zh-CN.md)。
+完整文件改动、验证结果、Git 提交说明见[中文实施记录](IMPLEMENTATION.zh-CN.md)。**在开发机上从安装到跑通的手把手步骤见 [开发机配置指南](CLIENT-SETUP.zh-CN.md)。**
 
 这是基于当前 Cline 仓库的独立离线发行版，复用 `sdk/packages/agents/src/agent-runtime.ts` 的实际 agent 循环。VS Code 扩展与 CLion 插件共用受限核心；原版账号、云 provider、遥测、对象存储上传、远程配置、市场、MCP、浏览器、可执行 hooks、更新代码不进入发布包。构建通过模块允许清单检查，防止上游导入变化把这些模块重新带入。
 
@@ -8,21 +8,16 @@
 
 ## 开发机（B）配置清单
 
-“开发机”指装插件、跑 VS Code／CLion 的那台;模型服务所在的机器记为 **A**。下面六步是完整路径,细节在后面的对应章节。
+一步步的命令、每步的预期输出、以及故障对照表，都在 **[开发机配置指南](CLIENT-SETUP.zh-CN.md)**。这里是索引：
 
-| 步 | 做什么 | 详见 |
-| --- | --- | --- |
-| 1 | 取两个包并校验:`dist/release/offline/pline-<版本>.vsix`(VS Code)与 `dist/release/pline-clion-<版本>-linux-x64.zip`(CLion) | 《名称与产物》 |
-| 2 | 首次安装先清旧身份:`code --uninstall-extension local-cline.claude-dev`;CLion 卸载旧的 `Cline Local` 插件 | 《名称》 |
-| 3 | 装 VSIX / 插件,填模型端点与模型 ID(例如 `http://192.168.0.33:8080/v1`) | 《安装与配置》 |
-| 4 | 选定加密方式(**推荐** SSH 隧道 + 回环,不开 `lanPlainHttp`) | 《让传输加密》与《A 方案…》 |
-| 5 | 需要调策略时写 `~/.config/cline-local/network.json`(只能收紧,不能放行公网) | 《机器级禁网开关》 |
-| 6 | 验收:发一个任务,看 Output 面板的 `[cline-local]` 行 | 本节下方 |
+1. 取包并校验 —— VS Code：`dist/release/offline/pline-<版本>.vsix`；CLion：`dist/release/pline-clion-<版本>-linux-x64.zip`（两者身份与产物见下文《名称与产物》）。
+2. 首次安装先清旧身份：`code --uninstall-extension local-cline.claude-dev`；CLion 卸载旧的 `Cline Local` 插件。
+3. 安装，在设置里填 Base URL（以 `/v1` 结尾）与模型服务提供的真实 Model ID。
+4. 选定加密方式：**推荐 SSH 隧道 + 回环**（不开 `lanPlainHttp`），详见《让传输加密》与《A 方案…》。
+5. 需要调策略时写 `~/.config/cline-local/network.json`（只能收紧，不能放行公网），改完必须重载窗口。
+6. 验收：发一个任务，看 Output 面板的 `[cline-local]` 行 —— 括号里的开关是否符合预期，且走隧道时**不应出现** `Plaintext http to …`。
 
-**验收看两行就够**(Output 面板选本插件的输出通道):
-
-- `… (lanPlainHttp=false, …)` —— 当前生效的策略开关;
-- **不应出现** `[cline-local] Plaintext http to …` —— 出现了说明仍有流量在打局域网 IP(隧道没被用上)。
+`IMPLEMENTATION.zh-CN.md` 第 8 节是 0.1.2 当时发布的安装记录（图标仍叫 `Cline Local`），保留作历史，不作为当前指引。
 
 界面打不开、图标没出现、地址被拒这三类常见情况的成因与解法,在《离线 VSIX 的已知问题》与《让传输加密》里。`IMPLEMENTATION.zh-CN.md` 第 8 节是 0.1.2 当时发布的安装记录(图标仍叫 `Cline Local`),保留作历史,不作为当前指引。
 
