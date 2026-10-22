@@ -24,7 +24,7 @@ export function pinOfCertificate(certificate: crypto.X509Certificate): string | 
 }
 
 /** `checkServerIdentity` that also verifies the configured SPKI pin. */
-export function pinnedCheckServerIdentity(): (host: string, cert: realTls.PeerCertificate) => Error | void {
+export function pinnedCheckServerIdentity(): (host: string, cert: realTls.PeerCertificate) => Error | undefined {
   const { pinSha256 } = getNetworkOptions();
   return (host, cert) => {
     const standard = realTls.checkServerIdentity(host, cert);
@@ -55,9 +55,9 @@ export function decorateTlsOptions(options: Record<string, unknown>): Record<str
   if (getNetworkOptions().pinSha256) {
     if (typeof next.checkServerIdentity !== "function") next.checkServerIdentity = pinnedCheckServerIdentity();
     else {
-      const outer = next.checkServerIdentity as (host: string, cert: realTls.PeerCertificate) => Error | void;
+      const outer = next.checkServerIdentity as (host: string, cert: realTls.PeerCertificate) => Error | undefined;
       const pin = pinnedCheckServerIdentity();
-      next.checkServerIdentity = (host, cert) => pin(host, cert) ?? outer(host, cert);
+      next.checkServerIdentity = (host: string, cert: realTls.PeerCertificate) => pin(host, cert) ?? outer(host, cert);
     }
   }
   return next;

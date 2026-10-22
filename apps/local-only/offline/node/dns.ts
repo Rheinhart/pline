@@ -58,6 +58,14 @@ function wrapResolve<T extends (...args: never[]) => unknown>(fn: T): T {
   }) as unknown as T;
 }
 
+/**
+ * `resolve4`/`resolve6` return objects when the caller asked for TTLs, so the
+ * address strings have to be pulled out before the policy can judge them.
+ */
+function addressesOf(records: readonly (string | realDns.RecordWithTtl)[]): string[] {
+  return records.map((record) => (typeof record === "string" ? record : record.address));
+}
+
 export const lookup = ((...args: unknown[]) => {
   const [host] = args as [string];
   if (typeof host === "string") refuse(host);
@@ -101,14 +109,14 @@ export const promises = {
   resolve4: ((hostname: string, options?: unknown) => {
     refuse(hostname);
     return realDns.promises.resolve4(hostname, options as never).then((records) => {
-      assertLookupResult(hostname, records);
+      assertLookupResult(hostname, addressesOf(records));
       return records;
     });
   }) as typeof realDns.promises.resolve4,
   resolve6: ((hostname: string, options?: unknown) => {
     refuse(hostname);
     return realDns.promises.resolve6(hostname, options as never).then((records) => {
-      assertLookupResult(hostname, records);
+      assertLookupResult(hostname, addressesOf(records));
       return records;
     });
   }) as typeof realDns.promises.resolve6,

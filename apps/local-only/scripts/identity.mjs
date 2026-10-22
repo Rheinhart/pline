@@ -18,6 +18,15 @@ export const IDENTITY = {
 	displayName: "Pline",
 };
 
+/**
+ * The offline distribution versions itself. apps/local-only/package.json carries
+ * the version of the other, hand-written local-only client, whose packaging
+ * writes `cline-local-<version>.vsix`; sharing that number made the two tracks
+ * overwrite each other's artifact in dist/release. This is also the version the
+ * bundle reports through ExtensionRegistryInfo, so it must match the VSIX.
+ */
+export const OFFLINE_VERSION = "0.2.0";
+
 /** Same rule as upstream: the built-in name keeps the short `cline` prefix. */
 export const commandPrefix = IDENTITY.name === "claude-dev" ? "cline" : IDENTITY.name;
 

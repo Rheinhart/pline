@@ -20,7 +20,7 @@ import { createRequire } from "node:module";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { auditBranding, patchManifest, stripBrandUrls } from "./identity.mjs";
+import { OFFLINE_VERSION, auditBranding, patchManifest, stripBrandUrls } from "./identity.mjs";
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repo = path.resolve(here, "../..");
@@ -281,7 +281,7 @@ async function main() {
   // Upstream derives every command and view ID from its own package.json name,
   // so the product rename happens here as well as in the packaged manifest:
   // the bundle imports this patched copy instead of apps/vscode/package.json.
-  const localVersion = JSON.parse(fs.readFileSync(path.join(here, "package.json"), "utf8")).version;
+  const localVersion = OFFLINE_VERSION;
   const { manifest } = patchManifest(JSON.parse(fs.readFileSync(path.join(app, "package.json"), "utf8")), localVersion);
   const identityFile = path.join(out, "package.identity.json");
   await fs.promises.writeFile(identityFile, `${JSON.stringify(manifest, null, 2)}\n`);

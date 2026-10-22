@@ -17,14 +17,17 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { IDENTITY, auditBrandUrls, patchManifest, stripBrandUrls } from "./identity.mjs";
+import { IDENTITY, OFFLINE_VERSION, auditBrandUrls, patchManifest, stripBrandUrls } from "./identity.mjs";
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repo = path.resolve(here, "../..");
 const app = path.join(repo, "apps/vscode");
 const bundle = path.join(here, "dist/offline-vscode");
 const stage = path.join(here, "dist/offline-vsix");
-const out = path.join(here, "dist/release");
+// A directory of its own: the other local-only client writes cline-local-<version>
+// artifacts into dist/release, and sharing that directory has already clobbered
+// one of its builds.
+const out = path.join(here, "dist/release/offline");
 
 const PUBLISHER = IDENTITY.publisher;
 const NAME = IDENTITY.name;
@@ -42,7 +45,7 @@ need(path.join(app, "webview-ui/build/assets/index.js"), "Run: bun run build:web
 need(path.join(app, "assets/icons/icon.png"), "The extension icon is missing from apps/vscode/assets/icons.");
 
 const source = JSON.parse(fs.readFileSync(path.join(app, "package.json"), "utf8"));
-const version = JSON.parse(fs.readFileSync(path.join(here, "package.json"), "utf8")).version;
+const version = OFFLINE_VERSION;
 
 // Same module the bundle build uses, so the contributed IDs in this manifest are
 // the IDs the compiled code registers.
