@@ -24,7 +24,7 @@ export function sandboxArguments(workspace: string, command: string): string[] {
 export async function runIsolated(workspace: string, command: string, signal?: AbortSignal): Promise<{ exitCode: number | null; output: string }> {
   if (typeof command !== "string" || !command.trim() || command.length > 8192) throw new Error("Invalid command.");
   sandboxArguments(workspace, command); // Fail before copying when isolation is unavailable.
-  const snapshot = await fs.mkdtemp(path.join(tmpdir(), "cline-local-build-"));
+  const snapshot = await fs.mkdtemp(path.join(tmpdir(), "pline-build-"));
   try {
     const project = await Workspace.open(workspace);
     // A clean snapshot excludes workspace sockets, links, credentials and hooks.

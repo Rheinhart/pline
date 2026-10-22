@@ -1,12 +1,12 @@
 <idea-plugin>
-  <id>local.cline.agent</id>
-  <name>Cline Local</name>
-  <version>0.1.2</version>
-  <vendor>Local Cline Fork</vendor>
+  <id>local.pline.agent</id>
+  <name>Pline</name>
+  <version>0.2.0</version>
+  <vendor>Local Pline</vendor>
   <description><![CDATA[Local coding agent with an explicitly configured private model endpoint. No cloud accounts, telemetry, marketplace, automatic updates or remote web resources. Linux x86_64 distribution.]]></description>
   <idea-version since-build="243"/>
   <depends>com.intellij.modules.platform</depends>
   <extensions defaultExtensionNs="com.intellij">
-    <toolWindow id="Cline Local" anchor="right" factoryClass="local.cline.LocalToolWindowFactory"/>
+    <toolWindow id="Pline" anchor="right" factoryClass="local.cline.LocalToolWindowFactory"/>
   </extensions>
 </idea-plugin>

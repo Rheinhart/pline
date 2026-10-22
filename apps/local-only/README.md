@@ -1,4 +1,4 @@
-# Cline Local：本机／内网模型专用发行版
+# Pline：本机／内网模型专用发行版（旧名 Cline Local）
 
 完整文件改动、验证结果、Git 提交说明见[中文实施记录](IMPLEMENTATION.zh-CN.md)。
 
@@ -8,8 +8,8 @@
 
 ## 安装与配置
 
-1. 从 `dist/release/` 取出 `.vsix` 或 `cline-local-clion-…-linux-x64.zip`，用随包 `SHA256SUMS` 校验。
-2. VS Code 使用本地 VSIX 安装，打开一个本地项目，点击活动栏的 **Cline Local** 图标；也可执行 **Cline Local: 打开本地 Agent**。如果从旧版升级后看不到图标，执行 **Developer: Reload Window**，并检查活动栏图标是否被隐藏。CLion 使用 **Settings → Plugins → Install Plugin from Disk** 安装 ZIP，打开 **Cline Local** 工具窗口。
+1. 从 `dist/release/` 取出 `.vsix` 或 CLion 的 `-linux-x64.zip`，用同目录的 `SHA256SUMS` 校验（`sha256sum -c SHA256SUMS`）。
+2. VS Code 使用本地 VSIX 安装，打开一个本地项目，点击活动栏的 **Pline** 图标（已发布的旧包显示为 **Cline Local**）；也可执行 **Pline: 打开本地 Agent**。如果从旧版升级后看不到图标，执行 **Developer: Reload Window**，并检查活动栏图标是否被隐藏。CLion 使用 **Settings → Plugins → Install Plugin from Disk** 安装 ZIP，打开 **Pline** 工具窗口。
 3. 在侧边栏点击“模型设置”，填写地址、模型 ID、上下文窗口、最大输出 token，以及可选的 Temperature、Top P、频率惩罚、存在惩罚、随机种子、Reasoning Effort 和 API Key；保存后新任务生效。VS Code 可以手动从**已保存的私有端点**读取 `/v1/models` 列表，也可以输入自定义 ID。配置保存在 `~/.config/cline-local/config.json`，目录权限 `0700`，文件权限 `0600`。Webview 不会读回已保存的 API Key 明文。不读取项目配置、原版 Cline 凭证、系统代理或云模型环境变量。
 4. 设置一个模型端点和模型 ID，开始新任务。没有在线模型发现、模型下载或公网回退；使用模型服务已提供的准确模型 ID。
 
@@ -160,7 +160,7 @@ sudo systemd-run --wait --pipe -p IPAddressAllow=127.0.0.0/8 \
 
 ```bash
 code --uninstall-extension local-cline.claude-dev
-code --install-extension apps/local-only/dist/release/pline-0.1.2.vsix
+code --install-extension --force apps/local-only/dist/release/offline/pline-0.2.0.vsix
 ```
 
 网络配置文件路径不变：`~/.config/cline-local/network.json`。
@@ -223,3 +223,22 @@ curl -sS http://127.0.0.1:8080/v1/models          # 在 B 上,应返回模型列
 ```
 
 然后在插件里发一个任务,并看 Output 面板:**不应出现任何 `[cline-local] Plaintext http to …` 提示**。出现了就说明仍有流量在打局域网 IP,即隧道没被用上;这条提示正是为此而打印的。
+
+## 名称与产物
+
+发行版统一叫 **Pline**(此前叫 Cline Local)。两条实现路线的产物互不相同,也**不再共用文件名**(曾经共用 `cline-local-<version>.vsix` 时,一条路线覆盖过另一条的产物):
+
+| 路线 | 身份 | 产物 | 版本号来源 |
+| --- | --- | --- | --- |
+| 原版扩展的离线构建(功能与界面最全) | VS Code `local.pline`,命令前缀 `pline.` | `dist/release/offline/pline-<版本>.vsix` | `scripts/identity.mjs` 的 `OFFLINE_VERSION` |
+| 最小客户端(VS Code + CLion) | VS Code `local.pline-minimal`;JetBrains 插件 `local.pline.agent`,工具窗口 **Pline** | `dist/release/pline-minimal-<版本>.vsix`、`pline-minimal-clion-<版本>-linux-x64.zip` | `apps/local-only/package.json` 的 `version` |
+
+**改名只发生在源码里,已发布的旧产物仍是旧身份**。`dist/release/` 里现存的是改名前构建的 `cline-local-0.1.2.vsix` 与 `cline-local-clion-0.1.2-linux-x64.zip`(内容与 `SHA256SUMS` 一致,功能不受影响);要得到 Pline 身份的最小客户端包,需要在装有 IntelliJ/CLion 的机器上重新打包(见下)。
+
+**配置目录仍是 `~/.config/cline-local/`**,两条路线共用(离线扩展读 `network.json`,最小客户端读 `config.json`,历史在 `~/.local/share/cline-local/`)。目录名保留旧拼写是**有意兼容**,不改名是为了不让你已写好的配置和已有会话记录失效。
+
+改名后重打最小客户端包(需要 JetBrains SDK jar,缺文件时脚本会在写盘前停下并列出缺什么):
+
+```bash
+LOCAL_ONLY_JAVA_DEPS=/path/to/idea/lib bun -F @cline/local-only package
+```

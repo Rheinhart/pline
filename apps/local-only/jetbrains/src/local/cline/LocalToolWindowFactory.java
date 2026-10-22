@@ -28,7 +28,7 @@ public final class LocalToolWindowFactory implements ToolWindowFactory {
         private static final long serialVersionUID = 1L;
         private final JTextArea output = textArea(18, 60);
         private final JTextArea input = textArea(5, 60);
-        private final JLabel status = new JLabel("Cline Local · 仅连接配置的本机／内网模型");
+        private final JLabel status = new JLabel("Pline · 仅连接配置的本机／内网模型");
         private final Project project;
         private Process process;
         private BufferedWriter writer;
@@ -79,7 +79,7 @@ public final class LocalToolWindowFactory implements ToolWindowFactory {
                 String root = project.getBasePath();
                 if (root == null) throw new IOException("请先打开本地项目。");
                 Path jar = Paths.get(LocalToolWindowFactory.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-                Path binary = jar.getParent().getParent().resolve("bin/cline-local");
+                Path binary = jar.getParent().getParent().resolve("bin/pline");
                 if (!Files.isRegularFile(binary)) throw new IOException("安装包缺少本地核心；请重新安装完整 ZIP。");
                 // ZIP extraction can lose executable bits. Only mark the bundled core executable.
                 Files.setPosixFilePermissions(binary, PosixFilePermissions.fromString("rwxr-xr-x"));
