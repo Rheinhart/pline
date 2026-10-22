@@ -133,3 +133,34 @@ sudo apps/local-only/scripts/lan-only.sh on
 ```
 
 它给默认路由加一条 `blackhole`（IPv4 与 IPv6），非本地网段立即返回 `Network unreachable`；不持有状态，也不与 ufw/docker/nftables 规则冲突，删掉这条路由即恢复。局限：不区分程序与端口，只作用于主路由表。模型机上更精细的做法是只约束模型服务本身（systemd drop-in：`IPAddressAllow=127.0.0.0/8 192.168.0.0/24 ::1 fe80::/10` 加 `IPAddressDeny=any`），这样其余开发工具照常联网。
+
+## 模型机定向防火墙（strata-nvfp）
+
+模型服务与开发工具跑在同一台机器、同一个用户下，所以不能用 `iptables -m owner --uid-owner`（那会连带屏蔽人的终端）。改用 systemd 的单元级过滤，只影响这一个服务：
+
+```bash
+sudo install -D -m 644 apps/local-only/systemd/model-host-lan-only.conf \
+  /etc/systemd/system/strata-nvfp4.service.d/lan-only.conf
+sudo systemctl daemon-reload && sudo systemctl restart strata-nvfp4
+```
+
+**必须验证**，因为过滤可能静默失效（这台机器上非特权用户单元就是如此，`IPAddressDeny=any` 下 curl 仍返回 200）：
+
+```bash
+systemctl show strata-nvfp4.service -p IPAddressAllow,IPAddressDeny
+sudo systemd-run --wait --pipe -p IPAddressAllow=127.0.0.0/8 \
+  -p IPAddressAllow=192.168.0.0/24 -p IPAddressDeny=any curl -m 4 -sS https://example.com
+```
+
+第二条应当失败（`Network unreachable` 或超时）。之后在客户端发一个任务确认模型仍可访问，即完成验收。
+
+## 名称
+
+发行版名为 **Pline**，扩展身份 `local.pline`，命令前缀 `pline.`。上游从自己的 `package.json` name 派生全部命令与视图 ID，所以重命名同时发生在编译期与发布包 `contributes`，由 `scripts/identity.mjs` 统一生成——两边不一致不会报错，只会静默丢掉右键菜单、快捷键和侧栏。旧身份 `local-cline.claude-dev` 需先卸载：
+
+```bash
+code --uninstall-extension local-cline.claude-dev
+code --install-extension apps/local-only/dist/release/pline-0.1.2.vsix
+```
+
+网络配置文件路径不变：`~/.config/cline-local/network.json`。

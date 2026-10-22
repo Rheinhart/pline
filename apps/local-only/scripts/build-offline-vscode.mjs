@@ -20,6 +20,7 @@ import { createRequire } from "node:module";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { auditBranding, patchManifest, stripBrandUrls } from "./identity.mjs";
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repo = path.resolve(here, "../..");
@@ -277,6 +278,15 @@ async function main() {
     `${JSON.stringify({ appBaseUrl: "http://127.0.0.1:1", apiBaseUrl: "http://127.0.0.1:1", mcpBaseUrl: "http://127.0.0.1:1/v1/mcp" }, null, 2)}\n`,
   );
 
+  // Upstream derives every command and view ID from its own package.json name,
+  // so the product rename happens here as well as in the packaged manifest:
+  // the bundle imports this patched copy instead of apps/vscode/package.json.
+  const localVersion = JSON.parse(fs.readFileSync(path.join(here, "package.json"), "utf8")).version;
+  const { manifest } = patchManifest(JSON.parse(fs.readFileSync(path.join(app, "package.json"), "utf8")), localVersion);
+  const identityFile = path.join(out, "package.identity.json");
+  await fs.promises.writeFile(identityFile, `${JSON.stringify(manifest, null, 2)}\n`);
+  REDIRECTS.set(path.join(app, "package.json"), identityFile);
+
   const result = await esbuild.build({
     absWorkingDir: app,
     bundle: true,
@@ -320,6 +330,22 @@ async function main() {
 
   if (process.env.LOCAL_OFFLINE_META) {
     await fs.promises.writeFile(process.env.LOCAL_OFFLINE_META, JSON.stringify(result.metafile));
+  }
+
+  // Remove upstream site links from the compiled extension: every one of them
+  // would open an external browser, which is the internet. Done after the fact
+  // so the upstream source stays untouched.
+  const bundleFile = path.join(out, "extension.js");
+  const compiled = await fs.promises.readFile(bundleFile, "utf8");
+  const stripped = stripBrandUrls(compiled);
+  if (stripped.code !== compiled) await fs.promises.writeFile(bundleFile, stripped.code);
+  const removed = Object.entries(stripped.counts).filter(([, count]) => count > 0);
+  if (removed.length > 0) {
+    console.log(`Removed upstream URLs from the extension bundle: ${removed.map(([url, n]) => `${url} ×${n}`).join(", ")}.`);
+  }
+  const brandingProblems = auditBranding(stripped.code);
+  if (brandingProblems.length > 0) {
+    throw new Error(`Offline branding audit failed:\n${brandingProblems.join("\n")}`);
   }
   const { inputs, pending } = audit(result.metafile);
   await fs.promises.writeFile(

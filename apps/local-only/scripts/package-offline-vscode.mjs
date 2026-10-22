@@ -17,6 +17,7 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { IDENTITY, auditBrandUrls, patchManifest, stripBrandUrls } from "./identity.mjs";
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repo = path.resolve(here, "../..");
@@ -25,8 +26,8 @@ const bundle = path.join(here, "dist/offline-vscode");
 const stage = path.join(here, "dist/offline-vsix");
 const out = path.join(here, "dist/release");
 
-const PUBLISHER = "local-cline";
-const NAME = "claude-dev";
+const PUBLISHER = IDENTITY.publisher;
+const NAME = IDENTITY.name;
 
 function need(file, hint) {
   if (!fs.existsSync(file)) {
@@ -43,13 +44,13 @@ need(path.join(app, "assets/icons/icon.png"), "The extension icon is missing fro
 const source = JSON.parse(fs.readFileSync(path.join(app, "package.json"), "utf8"));
 const version = JSON.parse(fs.readFileSync(path.join(here, "package.json"), "utf8")).version;
 
+// Same module the bundle build uses, so the contributed IDs in this manifest are
+// the IDs the compiled code registers.
+const { manifest: patched, counts } = patchManifest(source, version);
+
 const manifest = {
-  ...source,
-  publisher: PUBLISHER,
-  name: NAME,
-  version,
-  displayName: "Cline Local",
-  description: "Cline 本机／内网模型专用发行版：保留原有界面与本地功能，不连接互联网。Offline build: original UI, no internet access.",
+  ...patched,
+  description: `${IDENTITY.displayName} 本机／内网模型专用发行版：保留原有界面与本地功能，不连接互联网。Offline build: original UI, no internet access.`,
   preview: false,
   // No marketplace identity, no telemetry endpoints from the manifest.
   repository: undefined,
@@ -60,16 +61,14 @@ const manifest = {
     color: undefined,
     theme: "dark",
   },
-  activationEvents: source.activationEvents,
-  contributes: source.contributes,
-  capabilities: { ...(source.capabilities ?? {}), untrustedWorkspaces: { supported: false } },
   main: "./dist/extension.js",
   browser: undefined,
   scripts: undefined,
   devDependencies: undefined,
   dependencies: undefined,
-  engines: source.engines,
 };
+for (const [key, value] of Object.entries(manifest)) if (value === undefined) delete manifest[key];
+console.log(`Renamed identity to ${IDENTITY.publisher}.${IDENTITY.name}: ${counts.commands} command IDs, ${counts.views} view references.`);
 for (const [key, value] of Object.entries(manifest)) if (value === undefined) delete manifest[key];
 
 fs.rmSync(stage, { recursive: true, force: true });
@@ -82,13 +81,25 @@ fs.copyFileSync(path.join(bundle, "extension.js"), path.join(root, "dist", "exte
 fs.cpSync(path.join(bundle, "plugin-runtime"), path.join(root, "dist", "plugin-runtime"), { recursive: true });
 fs.copyFileSync(path.join(bundle, "endpoints.json"), path.join(root, "endpoints.json"));
 fs.cpSync(path.join(app, "webview-ui/build"), path.join(root, "webview-ui", "build"), { recursive: true });
+
+// The webview bundle carries the upstream documentation and dashboard links.
+// They are replaced with an inert `#` here so the panel offers no way to reach a
+// site this distribution cannot load; upstream source stays untouched.
+const webviewScript = path.join(root, "webview-ui", "build", "assets", "index.js");
+const webview = stripBrandUrls(await fs.promises.readFile(webviewScript, "utf8"));
+await fs.promises.writeFile(webviewScript, webview.code);
+const webviewRemoved = Object.entries(webview.counts).filter(([, count]) => count > 0);
+if (webviewRemoved.length === 0) console.warn("Warning: no upstream URLs found in the webview bundle — was the webview rebuilt?");
+else console.log(`Removed upstream URLs from the webview: ${webviewRemoved.map(([label, n]) => `${label} ×${n}`).join(", ")}.`);
+const webviewProblems = auditBrandUrls(webview.code);
+if (webviewProblems.length > 0) throw new Error(`Webview branding audit failed:\n${webviewProblems.join("\n")}`);
 fs.cpSync(path.join(app, "assets"), path.join(root, "assets"), { recursive: true });
 fs.copyFileSync(path.join(app, "LICENSE"), path.join(root, "LICENSE"));
 fs.writeFileSync(
   path.join(root, "README.md"),
-  `# Cline Local（本机／内网模型专用）
+  `# ${IDENTITY.displayName}（本机／内网模型专用）
 
-这是 Cline 的离线发行版：界面与本地功能保持原样，但不连接互联网。
+这是 ${IDENTITY.displayName} 的离线发行版：界面与本地功能保持原样，但不连接互联网。
 
 - 唯一允许的网络目标是用户配置的本机／内网模型端点（回环地址与私有网段；非回环强制 https）。
 - 公网地址、链路本地与云元数据地址、域名默认全部拒绝；拒绝发生在请求体产生之前。
@@ -153,9 +164,9 @@ fs.writeFileSync(
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
     <Identity Language="en-US" Id="${NAME}" Version="${version}" Publisher="${PUBLISHER}" />
-    <DisplayName>Cline Local</DisplayName>
-    <Description xml:space="preserve">Cline 本机／内网模型专用发行版：保留原有界面与本地功能，不连接互联网。</Description>
-    <Tags>cline,ai,chat,local model,offline</Tags>
+    <DisplayName>${IDENTITY.displayName}</DisplayName>
+    <Description xml:space="preserve">${IDENTITY.displayName} 本机／内网模型专用发行版：保留原有界面与本地功能，不连接互联网。</Description>
+    <Tags>${IDENTITY.name.toLowerCase()},ai,chat,local model,offline</Tags>
     <Categories>${(manifest.gallery?.categories ?? ["AI", "Chat", "Other"]).join(",")}</Categories>
     <GalleryFlags>Public</GalleryFlags>
     <Properties>
@@ -178,7 +189,7 @@ fs.writeFileSync(
 );
 
 fs.mkdirSync(out, { recursive: true });
-const vsix = path.join(out, `cline-local-${version}.vsix`);
+const vsix = path.join(out, `${IDENTITY.name}-${version}.vsix`);
 fs.rmSync(vsix, { force: true });
 execFileSync("zip", ["-r", "-X", "-q", vsix, "[Content_Types].xml", "extension.vsixmanifest", "extension"], {
   cwd: stage,
@@ -192,5 +203,5 @@ fs.writeFileSync(
   `${sha256}  ${path.basename(vsix)}\n`,
 );
 console.log(
-  `Packed ${path.basename(vsix)} (${(bytes.length / 1024 / 1024).toFixed(1)} MiB, sha256 ${sha256.slice(0, 16)}…) as ${PUBLISHER}.${NAME}@${version}.`,
+  `Packed ${path.basename(vsix)} (${(bytes.length / 1024 / 1024).toFixed(1)} MiB, sha256 ${sha256.slice(0, 16)}…) as ${IDENTITY.publisher}.${IDENTITY.name}@${version}.`,
 );

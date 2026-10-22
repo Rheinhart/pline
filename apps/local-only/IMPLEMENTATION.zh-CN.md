@@ -29,7 +29,19 @@
 1. 非回环的明文 http 默认被拒，报 `Plaintext http to 192.168.0.33 would expose your code on the LAN`。这是设计如斯：目标地址是 RFC1918（允许），但明文出本机就可能被同网段设备抓包。解法：`~/.config/cline-local/network.json` 写 `{ "lanPlainHttp": true }` 并重载窗口；想保留加密则用 SSH 隧道（`ssh -N -L 8080:127.0.0.1:8080 主机`，然后填 `http://127.0.0.1:8080/v1`）或给服务端配证书（`caCertPath` / `pinSha256`）。
 2. 首次打开侧栏报 `Could not register service worker: InvalidStateError: … The document is in an invalid state`。**已确认原因**：VS Code 配置目录里残留的 service worker 缓存；完全退出后删除 `<配置目录>/Service Worker`（如 `~/.config/Code/Service Worker`）即恢复正常，用户机器已实测。与离线层无关；能报出 `local-cline.claude-dev` 就说明扩展已激活、视图已注册。官方 `saoudrizwan.claude-dev` 未安装时不存在视图 ID 冲突。
 
-### 0.1 机器级开关（命令与其他程序的禁网保证）
+### 0.1 产品名与上游链接
+
+产品名改为 **Pline**（身份 `local.pline`，命令前缀 `pline.`）。上游从自己的 `package.json` name 派生**每一个**命令与视图 ID（`src/registry.ts`），所以上线重命名必须同时发生在两边：编译时把 `apps/vscode/package.json` 重定向到补丁后的副本（`package.identity.json`，打包产物里可见 `name = "pline"`），发布包的 `contributes` 则重写容器 ID、视图 ID、20 个命令 ID、`when` 子句里的引用与标题。两边共用 `scripts/identity.mjs`，这是它们不会错位的唯一保证；错位不会报错，只会静默丢掉右键菜单、快捷键和整个侧栏。审计会仍回读编译产物里内联的身份值（命令 ID 是拼接出来的，无法当字面量 grep）。
+
+上游站点链接在**编译产物**里换成惰性的 `#`（源码不动）：扩展包 26 处 `*.cline.bot` + 3 处 `github.com/cline`，Webview 36 + 7 + 2 处。匹配模式故意宽（包含 `docs.` / `app.` / `api.` / staging 主机与 `@cline.bot` 邮箱判定）——漏一个变体就是留一个活链接。模型商的 API 基址（openrouter.ai 等）**不算品牌**，它们是云端 provider 的配置默认值，保留。
+
+### 0.2 模型机定向防火墙
+
+模型服务是 systemd 单元 `strata-nvfp4.service`（`User=thomas`，监听 `0.0.0.0:8080`）。**不能按 UID 过滤**——它跟开发者是同一个用户，`iptables -m owner --uid-owner` 会连带屏蔽人的终端。改用单元级 cgroup 过滤（`systemd/model-host-lan-only.conf`）：`IPAddressAllow=127.0.0.0/8 192.168.0.0/24 ::1/128 fe80::/10` + `IPAddressDeny=any`，入站查源地址、出站查目的地址，因此只影响这一个服务，其余进程（包括模型下载）照常。站点本地 IPv6（`fd00::/8`）**故意不允**——那台机器上这段属 tailscale。
+
+未能本机验证：无免密 sudo，而**非特权用户单元会静默忽略这套过滤**（`systemd-run --user` 实验里 `IPAddressDeny=any` 下 curl 仍返回 200）。所以下面那条验证命令是必需的，不是走过场：过滤静默失效比没有过滤更危险。
+
+### 0.3 机器级开关（命令与其他程序的禁网保证）
 
 扩展层只能保证 **Cline 自己**不出公网。有两块构造上盖不到：
 
